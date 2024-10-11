@@ -9,9 +9,11 @@ Except for torch, the other packages can be installed by running the commands in
 ## Environment Setup
 
 1. Use `conda` to create a virtual environment, specifying `python=3.8`. Let's assume the environment name is `your_env`.
-2. Install torch following the instructions on the official Torch website.
-3. Use `conda` or `pip` to install is ok for
 
+2. Install torch following the instructions on the official Torch website.
+
+3. Use `conda` or `pip` to install is ok for
+   
    ```ssh
    pip install eclipse-sumo
    pip install traci
@@ -20,12 +22,13 @@ Except for torch, the other packages can be installed by running the commands in
    pip install gymnasium
    pip install pettingzoo
    ```
-4. Set the SUMO path. On Linux:
 
+4. Set the SUMO path. On Linux:
+   
    ```bash
    export SUMO_HOME=miniconda3/envs/{your_env}/lib/{python3.8}/site-packages/sumo
    ```
-
+   
    (Where `miniconda` might be `anaconda`). On Windows, set an environment variable pointing to the SUMO folder.
 
 ## Run MacLight
@@ -38,9 +41,9 @@ python run_Ours.py -w 1 -t block -l normal
 
 After the execution is complete, the data will be saved in the `data/plot_data/` folder.
 
-# Block Environment Generation Guide
+# Dynamic Traffic Flow Construction Guide
 
-## Block Environment Usage Guide
+## Block Environment Code
 
 Refer to the file `env\wrap\random_block.py`.
 
@@ -49,16 +52,19 @@ Refer to the file `env\wrap\random_block.py`.
 After installing SUMO and configuring its environment variables, you can create the simulation environment.
 
 1. Use the following command to create a simple road network:
+   
    ```bash
    netgenerate --grid --grid.number=6 --grid.length=200 --default.lanenumber=6 -o ff.net.xml
    ```
 2. In `netedit`, manually delete the surrounding roads and the corner nodes.
 3. Create traffic lights:
+   
    ```bash
    netconvert --sumo-net-file ff.net.xml --tls.guess --output-file ff.net.xml
    ```
 4. Delete the left-turn and straight signals for the left lanes of the traffic lights.
 5. Modify the traffic light phases in the `ff.net.xml` file (do not use the default phases) by locating the `</tlLogic>` tag and adjusting all traffic light phases to:
+   
    ```xml
    <phase duration="30" state="grrrgGGrgrrrgGGr"/>
    <phase duration="3"  state="grrrgGGrgrrrgyyr"/>
@@ -100,7 +106,7 @@ To block a road by reducing its speed limit:
 traci.edge.setMaxSpeed(edge, 1)
 ```
 
-## List of All Roads
+## ID List of All Lanes
 
 ```python
 ['A1B1', 'A2B2', 'A3B3', 'A4B4',
@@ -157,3 +163,5 @@ Prohibited starting edges:
 ```
 
 These edges may be blocked, so they cannot be set as start or end points.
+
+
