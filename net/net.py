@@ -29,13 +29,13 @@ class ValueNet(torch.nn.Module):
         return self.fc2(x)
 
 
-# VAE 模型
+# VAE
 class VAE(nn.Module):
     def __init__(self, state_dim=33, latent_dim=16):
         super(VAE, self).__init__()
 
-        # 编码器部分：Convolutional Layers
-        # 输入: [batch_size, 33, 4, 4]
+        # Encoder: Convolutional Layers
+        # Input: [batch_size, 33, 4, 4]
         self.encoder = nn.Sequential(
             nn.Conv2d(state_dim, 64, kernel_size=3, stride=1, padding=1),  # [batch_size, 64, 4, 4]
             nn.ReLU(),
@@ -45,49 +45,49 @@ class VAE(nn.Module):
             nn.ReLU()
         )
 
-        # Flatten卷积输出并映射到潜在空间
-        self.fc_mu = nn.Linear(256 * 2 * 2, latent_dim)        # 均值
-        self.fc_logvar = nn.Linear(256 * 2 * 2, latent_dim)    # 对数方差
+        # Flatten the convolution output and map it to the latent space
+        self.fc_mu = nn.Linear(256 * 2 * 2, latent_dim)        # Mean
+        self.fc_logvar = nn.Linear(256 * 2 * 2, latent_dim)    # std
 
-        # 将潜在向量映射回到解码器的输入维度
+        # Map the latent vector back to the decoder input dimension
         self.fc_decode = nn.Linear(latent_dim, 256 * 2 * 2)
 
-        # 解码器部分：Transposed Convolutional Layers（反卷积）
+        # Decoder: Transposed Convolutional Layers
         self.decoder = nn.Sequential(
             nn.ConvTranspose2d(256, 128, kernel_size=3, stride=2, padding=1, output_padding=1),  # [batch_size, 128, 4, 4]
             nn.ReLU(),
             nn.ConvTranspose2d(128, 64, kernel_size=3, stride=1, padding=1),  # [batch_size, 64, 4, 4]
             nn.ReLU(),
             nn.ConvTranspose2d(64, 33, kernel_size=3, stride=1, padding=1),  # [batch_size, 33, 4, 4]
-            nn.Sigmoid()  # 输出范围在 [0, 1]，适用于归一化的图像数据
+            nn.Sigmoid()  # The output range is [0, 1], as same as input feature range
         )
 
     def encode(self, x):
-        """编码器：提取输入并生成潜在变量的均值和方差"""
+        """Encoder: takes input and generates the mean and variance of the latent variable"""
         x = self.encoder(x)
-        x = x.view(x.size(0), -1)  # 展平成一维向量
-        mu = self.fc_mu(x)         # 均值
-        logvar = self.fc_logvar(x) # 对数方差
+        x = x.view(x.size(0), -1)  # Flatten into a one-dimensional vector
+        mu = self.fc_mu(x)         # mean
+        logvar = self.fc_logvar(x) # log_std
         return mu, logvar
 
     def reparameterize(self, mu, logvar):
-        """通过 reparameterization trick 采样潜在变量"""
-        std = torch.exp(0.5 * logvar)  # 计算标准差
-        eps = torch.randn_like(std)    # 从标准正态分布中采样
-        return mu + eps * std          # 采样潜在向量
+        """Sampling latent variables via the reparameterization trick"""
+        std = torch.exp(0.5 * logvar)  # Calculate the standard deviation
+        eps = torch.randn_like(std)    # Sampling from a standard normal distribution
+        return mu + eps * std          # Sample latent vectors
 
     def decode(self, z):
-        """解码器：将潜在变量映射回原始输入的维度"""
+        """Decoder: Maps latent variables back to the dimensions of the original input"""
         x = self.fc_decode(z)
-        x = x.view(x.size(0), 256, 2, 2)  # reshape回卷积层输入维度
+        x = x.view(x.size(0), 256, 2, 2)  # Reshape back the convolution layer input dimension
         x = self.decoder(x)
         return x
 
     def forward(self, x):
-        """前向传播：编码 -> 采样 -> 解码"""
-        mu, logvar = self.encode(x)        # 编码阶段
-        z = self.reparameterize(mu, logvar)  # 采样阶段
-        recon_x = self.decode(z)           # 解码阶段
+        """Forward propagation: Encoding -> Sampling -> Decoding"""
+        mu, logvar = self.encode(x)        # Encode
+        z = self.reparameterize(mu, logvar)  # Sampling
+        recon_x = self.decode(z)           # Decode
         return recon_x, mu, logvar
 
     def representation(self, x):
@@ -98,14 +98,14 @@ class VAnet(torch.nn.Module):
     '''For IDQN'''
     def __init__(self, state_dim, hidden_dim, action_dim):
         super(VAnet, self).__init__()
-        self.fc1 = torch.nn.Linear(state_dim, hidden_dim)  # 共享网络部分
+        self.fc1 = torch.nn.Linear(state_dim, hidden_dim)  # sharing part
         self.fc_A = torch.nn.Linear(hidden_dim, action_dim)
         self.fc_V = torch.nn.Linear(hidden_dim, 1)
 
     def forward(self, x):
         A = self.fc_A(F.relu(self.fc1(x)))
         V = self.fc_V(F.relu(self.fc1(x)))
-        Q = V + A - A.mean(-1).view(-1, 1)  # Q值由V值和A值计算得到
+        Q = V + A - A.mean(-1).view(-1, 1)  # The Q value is calculated from the V and A values
         return Q
 
 
