@@ -1,5 +1,7 @@
 # MacLight Configuration
 
+Code of AAMAS2025 paper "**MacLight: Multi-scene Aggregation Convolutional Learning for Traffic Signal Control**".
+
 ## Package Requirements
 
 Python 3.8, torch, numpy, pandas, tqdm, eclipse-sumo, traci, libsumo, sumo-rl
@@ -13,7 +15,7 @@ Except for torch, the other packages can be installed by running the commands in
 2. Install torch following the instructions on the official Torch website.
 
 3. Use `conda` or `pip` to install is ok for
-   
+
    ```ssh
    pip install eclipse-sumo
    pip install traci
@@ -24,11 +26,11 @@ Except for torch, the other packages can be installed by running the commands in
    ```
 
 4. Set the SUMO path. On Linux:
-   
+
    ```bash
    export SUMO_HOME=miniconda3/envs/{your_env}/lib/{python3.8}/site-packages/sumo
    ```
-   
+
    (Where `miniconda` might be `anaconda`). On Windows, set an environment variable pointing to the SUMO folder.
 
 ## Run MacLight
@@ -41,6 +43,34 @@ python run_Ours.py -w 1 -t block -l normal
 
 After the execution is complete, the data will be saved in the `data/plot_data/` folder.
 
+# Transfer Experiment Guide
+
+If you want to transfer this method, you can adjust the road `xml` file in the SUMO interface in `run_{algorithm}.py`. But it cannot be transferred arbitrarily because we have specified the data organization, that is, the road network needs to be a grid.
+
+You can also refer to our method for constructing dynamic traffic flow and our method for constructing variational autoencoders.
+
+**Dynamic traffic flow:** `env\wrap\random_block.py`. We also give a guide on how to build it, see the subsequent section `Dynamic Traffic Flow Construction Guide`.
+
+**variational autoencoders:** `net\net.py`.
+
+# Full Experimental Result
+
+A complete presentation of some experimental figures in the paper. Also gives the parameter settings.
+
+## Paremeters
+
+![img](image/README/parameters.jpg)
+
+## Road blocking experiment statistics
+
+Complete statistics on the changes in the distribution of traffic flow before and after the implementation of road blockage. Road map reference paper or subsequent section.
+
+![img](image/README/block_exp.png)
+
+## Full training
+
+![img](image/README/total_exp_appendix.png)
+
 # Dynamic Traffic Flow Construction Guide
 
 ## Block Environment Code
@@ -52,19 +82,19 @@ Refer to the file `env\wrap\random_block.py`.
 After installing SUMO and configuring its environment variables, you can create the simulation environment.
 
 1. Use the following command to create a simple road network:
-   
+
    ```bash
    netgenerate --grid --grid.number=6 --grid.length=200 --default.lanenumber=6 -o ff.net.xml
    ```
 2. In `netedit`, manually delete the surrounding roads and the corner nodes.
 3. Create traffic lights:
-   
+
    ```bash
    netconvert --sumo-net-file ff.net.xml --tls.guess --output-file ff.net.xml
    ```
 4. Delete the left-turn and straight signals for the left lanes of the traffic lights.
 5. Modify the traffic light phases in the `ff.net.xml` file (do not use the default phases) by locating the `</tlLogic>` tag and adjusting all traffic light phases to:
-   
+
    ```xml
    <phase duration="30" state="grrrgGGrgrrrgGGr"/>
    <phase duration="3"  state="grrrgGGrgrrrgyyr"/>
@@ -96,7 +126,7 @@ traci.vehicle.rerouteTraveltime(vehicle_id)
 
 ## Map
 
-![img](image/README/1726829649584.png)
+![img](image/README/road_map.png)
 
 ## Blocking Roads
 
