@@ -1,6 +1,6 @@
-# MacLight Configuration
+# MacLight
 
-Code of AAMAS2025 paper "**MacLight: Multi-scene Aggregation Convolutional Learning for Traffic Signal Control**".
+Code of AAMAS2025 full paper "[**MacLight: Multi-scene Aggregation Convolutional Learning for Traffic Signal Control**](https://arxiv.org/abs/2412.15703)".
 
 ## Package Requirements
 
@@ -43,7 +43,9 @@ python run_Ours.py -w 1 -t block -l normal
 
 After the execution is complete, the data will be saved in the `data/plot_data/` folder.
 
-# Transfer Experiment Guide
+## Test your method
+
+### Experimental Limitations
 
 If you want to transfer this method, you can adjust the road `xml` file in the SUMO interface in `run_{algorithm}.py`. But it cannot be transferred arbitrarily because we have specified the data organization, that is, the road network needs to be a grid.
 
@@ -53,21 +55,72 @@ You can also refer to our method for constructing dynamic traffic flow and our m
 
 **variational autoencoders:** `net\net.py`.
 
-# Full Experimental Result
+### Train Your Method in Our Road Network
+
+#### Road network files
+
+If you plan to test your method on our road network, you can find road network files in `env\map`.
+
+- `ff.net.xml` is road network. It is unchanging, and the difference between the different environments is the traffic flow file.
+- `ff_normal.rou.xml` is traffic flow file under normal pressure (Normal&Block).
+- `ff_hard.rou.xml` is traffic flow file under high pressure (Peak).
+
+It should be noted that the normal pressure we set is also relatively high.
+
+**Traffic flow reference table:**
+
+![img](image/README/flow.jpg)
+
+#### example to create an enviroment
+
+Our environment interface inherits from [gymnasium](https://gymnasium.farama.org/) and [sumo-rl](https://github.com/LucasAlegre/sumo-rl), so you can easily migrate your algorithms.
+
+1. Static environment:
+
+   The direction of the vehicle is completely fixed and the route will not be changed.
+
+   ```python
+   env = sumo_rl.parallel_env(net_file='env/map/ff.net.xml',
+                              route_file=f'env/map/ff_normal.rou.xml',  # Could be `ff_hard.rou.xml`
+                              num_seconds=args.seconds,
+                              use_gui=False,
+                              sumo_warnings=False,
+                              additional_sumo_cmd='--no-step-log')
+   ```
+
+2. Dynamic environment
+
+   We define the `BlockStreet` class, which can randomly block certain roads, so that vehicles reselect the best route, which will cause sudden changes in traffic flow on certain roads.
+
+   ```python
+   from env.wrap.random_block import BlockStreet
+   # block_num: Number of blocked roads, like 8
+   # seconds: Simulation seconds, up to 3600
+   env = BlockStreet(env, block_num, seconds)
+   ```
+
+Additionally, we strongly recommend that you set the following environment variables to get the fastest possible simulation (although it may still be slower):
+
+```python
+import os
+os.environ['LIBSUMO_AS_TRACI'] = '1'
+```
+
+## Full Experimental Result
 
 A complete presentation of some experimental figures in the paper. Also gives the parameter settings.
 
-## Paremeters
+### Paremeters
 
 ![img](image/README/parameters.jpg)
 
-## Road blocking experiment statistics
+### Road blocking experiment statistics
 
 Complete statistics on the changes in the distribution of traffic flow before and after the implementation of road blockage. Road map reference paper or subsequent section.
 
 ![img](image/README/block_exp.png)
 
-## Full training
+### Full training
 
 ![img](image/README/total_exp_appendix.png)
 
@@ -86,12 +139,14 @@ After installing SUMO and configuring its environment variables, you can create 
    ```bash
    netgenerate --grid --grid.number=6 --grid.length=200 --default.lanenumber=6 -o ff.net.xml
    ```
+
 2. In `netedit`, manually delete the surrounding roads and the corner nodes.
 3. Create traffic lights:
 
    ```bash
    netconvert --sumo-net-file ff.net.xml --tls.guess --output-file ff.net.xml
    ```
+
 4. Delete the left-turn and straight signals for the left lanes of the traffic lights.
 5. Modify the traffic light phases in the `ff.net.xml` file (do not use the default phases) by locating the `</tlLogic>` tag and adjusting all traffic light phases to:
 
@@ -194,4 +249,19 @@ Prohibited starting edges:
 
 These edges may be blocked, so they cannot be set as start or end points.
 
+## Cite
 
+If our repository is helpful to you, you can cite it in your research.
+
+```bibtex
+@misc{sumorl,
+    author = {Sunbowen Lee},
+    title = {{MacLight}},
+    year = {2024},
+    publisher = {GitHub},
+    journal = {GitHub repository},
+    howpublished = {\url{https://github.com/Aegis1863/MacLight}},
+}
+```
+
+We also recommend looking at [sumo-rl](https://github.com/LucasAlegre/sumo-rl), our environment is based on their implementation.
