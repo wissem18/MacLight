@@ -254,7 +254,7 @@ These edges may be blocked, so they cannot be set as start or end points.
 If our repository is helpful to you, you can cite it in your research.
 
 ```bibtex
-@misc{sumorl,
+@misc{MacLight2024Lee,
     author = {Sunbowen Lee},
     title = {{MacLight}},
     year = {2024},
