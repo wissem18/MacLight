@@ -110,7 +110,7 @@ os.environ['LIBSUMO_AS_TRACI'] = '1'
 
 A complete presentation of some experimental figures in the paper. Also gives the parameter settings.
 
-### Paremeters
+### Parameters
 
 ![img](image/README/parameters.jpg)
 
