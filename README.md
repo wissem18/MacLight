@@ -1,3 +1,7 @@
+<div align="center">
+    <img src="image/README/logo.png" width="100%" />
+</div>
+
 # MacLight
 
 Code of AAMAS2025 full paper "[**MacLight: Multi-scene Aggregation Convolutional Learning for Traffic Signal Control**](https://arxiv.org/abs/2412.15703)".
