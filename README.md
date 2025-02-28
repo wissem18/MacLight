@@ -114,7 +114,7 @@ os.environ['LIBSUMO_AS_TRACI'] = '1'
 
 A complete presentation of some experimental figures in the paper. Also gives the parameter settings.
 
-### Paremeters
+### Parameters
 
 ![img](image/README/parameters.jpg)
 
@@ -258,13 +258,14 @@ These edges may be blocked, so they cannot be set as start or end points.
 If our repository is helpful to you, you can cite it in your research.
 
 ```bibtex
-@misc{MacLight2024Lee,
-    author = {Sunbowen Lee},
-    title = {{MacLight}},
-    year = {2024},
-    publisher = {GitHub},
-    journal = {GitHub repository},
-    howpublished = {\url{https://github.com/Aegis1863/MacLight}},
+@misc{lee2024maclightmultisceneaggregationconvolutional,
+      title={MacLight: Multi-scene Aggregation Convolutional Learning for Traffic Signal Control}, 
+      author={Sunbowen Lee and Hongqin Lyu and Yicheng Gong and Yingying Sun and Chao Deng},
+      year={2024},
+      eprint={2412.15703},
+      archivePrefix={arXiv},
+      primaryClass={cs.MA},
+      url={https://arxiv.org/abs/2412.15703}, 
 }
 ```
 
