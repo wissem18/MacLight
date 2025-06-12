@@ -122,6 +122,7 @@ def update_transition(agent_name, epi_training, transition_dict, state, done, ac
                             [state, action, next_state, reward, done]):
         for agt_name in agent_name:
             if not epi_training:
+                print(f"[DEBUG] Type of val for agent {agt_name} at key {key}: {type(element[agt_name])}, value: {element[agt_name]}")
                 transition_dict[key][agt_name] = torch.tensor(element[agt_name]).unsqueeze(0)
             else:
                 transition_dict[key][agt_name] = torch.cat([transition_dict[key][agt_name],
