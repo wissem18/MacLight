@@ -26,7 +26,7 @@ class BlockStreet:
 
     def step(self, action):
         '''
-        Randomly block 4 road sections every 200 seconds, \n
+        Randomly block 8 road sections every 200 seconds, \n
         unblock them at the end of 200 seconds and set new blocking targets
         '''
 
