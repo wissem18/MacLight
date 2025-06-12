@@ -122,7 +122,16 @@ def update_transition(agent_name, epi_training, transition_dict, state, done, ac
                             [state, action, next_state, reward, done]):
         for agt_name in agent_name:
             if not epi_training:
-                transition_dict[key][agt_name] = torch.tensor(element[agt_name]).unsqueeze(0)
+                # changed this to work correctly in the collab
+                val = element[agt_name]
+                if isinstance(val, np.ndarray):
+                    val = torch.from_numpy(val).unsqueeze(0)
+                else:
+                    val = torch.tensor([val], dtype=torch.float32)
+
+                transition_dict[key][agt_name] = val
+
+                #transition_dict[key][agt_name] = torch.tensor(element[agt_name]).unsqueeze(0)
             else:
                 transition_dict[key][agt_name] = torch.cat([transition_dict[key][agt_name],
                                                             torch.tensor([element[agt_name]])])

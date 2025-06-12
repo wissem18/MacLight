@@ -39,6 +39,7 @@ if __name__ == '__main__':
                                use_gui=False,
                                sumo_warnings=False,
                                additional_sumo_cmd='--no-step-log')
+                               
     # Neural Networks
     agent_name = env.possible_agents
     state_dim = [env.observation_space(i).shape[0] for i in agent_name]
@@ -82,5 +83,4 @@ if __name__ == '__main__':
         magent = MARLWrap('I', MacLight, alg_args, PolicyNet, ValueNet,
                           state_dim, hidden_dim, action_dim, latent_dim=latent_dim)
         return_list, train_time = train_ours_agent(env, magent, agent_name, vae, args.writer,
-                                                   args.episodes, seed, CKP_PATH, evaluator,
-                                                   )
+                                                   args.episodes, seed, CKP_PATH, evaluator,)
