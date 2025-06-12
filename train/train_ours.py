@@ -124,6 +124,10 @@ def update_transition(agent_name, epi_training, transition_dict, state, done, ac
             if not epi_training:
                 # changed this to work correctly in the collab
                 val = element[agt_name]
+                # Check for None or invalid types
+                if val is None or (isinstance(val, float) and np.isnan(val)):
+                    print(f"[WARNING] Invalid value for agent {agt_name} at key {key}. Skipping update.")
+                    return transition_dict
                 if isinstance(val, np.ndarray):
                     val = torch.from_numpy(val).unsqueeze(0)
                 else:
