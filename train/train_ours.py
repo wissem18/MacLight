@@ -84,6 +84,7 @@ def train_ours_agent(
         else:
             vae_loss = None
         vae_loss_list.append(vae_loss)
+        
         # * ---- update agent ----
         for agt_name in agent_name:  # 更新网络
             actor_loss, critic_loss = agents[agt_name].update(transition_dict, agt_name)
