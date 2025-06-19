@@ -32,13 +32,14 @@ class MacLight:
         action_dist = torch.distributions.Categorical(probs)
         action = action_dist.sample()
         return action.item()
-
+  
     def update(self, transition_dict, agent_name, **kargs):
         states = torch.tensor(transition_dict['states'][agent_name], dtype=torch.float).to(self.device)
         actions = torch.tensor(transition_dict['actions'][agent_name], dtype=torch.int64).view(-1, 1).to(self.device)
         rewards = torch.tensor(transition_dict['rewards'][agent_name], dtype=torch.float).view(-1, 1).to(self.device)
         next_states = torch.tensor(transition_dict['next_states'][agent_name], dtype=torch.float).to(self.device)
         dones = torch.tensor(transition_dict['dones'][agent_name], dtype=torch.int).view(-1, 1).to(self.device)
+    
         if len(transition_dict['global_emb']) > 0:
             global_emb = torch.tensor(transition_dict['global_emb'], dtype=torch.float)
         else:
