@@ -137,7 +137,7 @@ def reshape_whole_state(state):
     global_state = global_state.permute(0, 3, 1, 2)
     return global_state
 
-# VAE 损失函数
+# VAE loss function
 def loss_function(recon_x, x, mu, logvar):
     # 重建损失 (MSE 或 BCE)
     recon_loss = F.mse_loss(recon_x, x, reduction='sum')
