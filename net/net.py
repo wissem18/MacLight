@@ -28,6 +28,69 @@ class ValueNet(torch.nn.Module):
         x = F.relu(self.h_1(F.relu(self.fc1(x))))
         return self.fc2(x)
 
+# Attention Mechanism
+class Attention(nn.module):
+    def __init__(self, feature_dim=33, num_agents=16):
+        super().__init__()
+        self.feature_dim = feature_dim
+        self.num_agents = num_agents
+        
+        # Linear transformations for query, key, and value
+        self.W_q = nn.Linear(feature_dim, feature_dim)  # Query transformation 
+        self.W_k = nn.Linear(feature_dim, feature_dim)  # Key transformation 
+        self.W_v = nn.Linear(feature_dim, feature_dim)  # Value transformation 
+        
+        # Scaling factor for attention scores
+        self.tau = feature_dim ** 0.5  # Scaled by sqrt(feature_dim) for stability
+
+    def forward(self, features):
+        """
+        Compute attention-based context vectors where the query comes from agent i,
+        and keys and values come from other agents j ≠ i.
+        
+        Args:
+            features: Tensor of shape (batch_size, num_agents, feature_dim)
+        
+        Returns:
+            context: Tensor of shape (batch_size, num_agents, feature_dim)
+                     Attention-applied output for each agent
+        """
+        batch_size, num_agents, feature_dim = features.size()
+        
+        # Step 1: Compute query for each agent i
+        # Shape: (batch_size, num_agents, feature_dim)
+        q = self.W_q(features)
+        
+        # Step 2: Prepare indices to exclude self (agent i) for keys and values
+        # We will compute keys and values for all agents first, then mask out i
+        k = self.W_k(features)  # Shape: (batch_size, num_agents, feature_dim)
+        v = self.W_v(features)  # Shape: (batch_size, num_agents, feature_dim)
+        
+        # Step 3: Compute attention scores between q_i and k_j for all j
+        # Shape: (batch_size, num_agents, num_agents)
+        scores = torch.matmul(q, k.transpose(-2, -1)) / self.tau
+        
+        # Step 4: Mask out self-attention (where i == j)
+        # Create a diagonal mask: True where i == j
+        mask = torch.eye(num_agents, device=features.device).bool()
+        mask = mask.unsqueeze(0).expand(batch_size, -1, -1)  # Shape: (batch_size, num_agents, num_agents)
+        
+        # Set scores where i == j to a large negative value to exclude self
+        scores = scores.masked_fill(mask, -1e9)
+        
+        # Step 5: Compute attention weights using softmax
+        # Shape: (batch_size, num_agents, num_agents)
+        attention_weights = F.softmax(scores, dim=-1)
+        
+        # Step 6: Compute context vectors using values from other agents
+        # Multiply attention weights with values v_j
+        # Shape: (batch_size, num_agents, feature_dim)
+        context = torch.matmul(attention_weights, v)
+        
+        # Step 7: Apply ReLU activation to the context vectors
+        context = F.relu(context)
+        
+        return context    
 
 # VAE
 class VAE(nn.Module):

@@ -4,7 +4,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
-
+from net.net import Attention
 
 def train_ours_agent(
     env: object,
@@ -32,7 +32,14 @@ def train_ours_agent(
     best_score = -1e10
     actor_best_weight = {}
     critic_best_weight = {}
-    optimizer = optim.Adam(vae.parameters(), lr=1e-3) if vae else None
+
+    # Initialize Attention module
+    attention = Attention(feature_dim=33, num_agents=len(agent_name)).to(device)
+    
+    # declare the same optimizer for VAE and Attention to align with end-to-end training because also the attention share the same objective with VAE which is enhancing the compact global state representation         
+    optimizer = optim.Adam(list(vae.parameters()) + list(attention.parameters()), lr=1e-3) if vae else None
+
+
 
     for episode in range(total_episodes):
         epi_training = False
