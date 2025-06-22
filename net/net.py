@@ -28,69 +28,85 @@ class ValueNet(torch.nn.Module):
         x = F.relu(self.h_1(F.relu(self.fc1(x))))
         return self.fc2(x)
 
-# Attention Mechanism
-class Attention(nn.module):
-    def __init__(self, feature_dim=33, num_agents=16):
-        super().__init__()
-        self.feature_dim = feature_dim
-        self.num_agents = num_agents
-        
-        # Linear transformations for query, key, and value
-        self.W_q = nn.Linear(feature_dim, feature_dim)  # Query transformation 
-        self.W_k = nn.Linear(feature_dim, feature_dim)  # Key transformation 
-        self.W_v = nn.Linear(feature_dim, feature_dim)  # Value transformation 
-        
-        # Scaling factor for attention scores
-        self.tau = feature_dim ** 0.5  # Scaled by sqrt(feature_dim) for stability
+# ------------------------------------------------------------------
+# Single-head (fully-connected) neighbour Attention
+# ------------------------------------------------------------------
+#  • H contains *local+positional* tokens for ALL 16 intersections
+#    of the grid at the current time-step.
+#  • For each intersection i we want a **global embedding** g_i that is
+#    a weighted combination of the OTHER intersections’ features.
+#  • We forbid self-attention (i → i) by masking the diagonal.
+#  • Output dimension d_out is configurable (here 32).  This is the
+#    vector you will later concatenate with the 33-dim local state
+#    before feeding the critic / actor.
+#
+#  Tunable hyper-params
+#  --------------------
+#  d_in   : dim of each input token (33 local + 8 pos = 41 in our setup)
+#  d_a    : hidden/“attention” size used for Q,K,V projections
+#           (64 is a standard small value;)
+#  d_out  : size of final global vector g_i  (32)
+#
+# ------------------------------------------------------------------
+class Attention(nn.Module):
+    """
+    Parameters
+    ----------
+    d_in  : int   dimension of input token  (default 41)
+    d_a   : int   dimension of Q / K / V projections (default 64)
+    d_out : int   dimension of aggregated neighbour vector (default 32)
 
-    def forward(self, features):
+    Forward
+    -------
+    H : Tensor, shape (B, N, d_in)
+        B = batch ; N = number of agents (16 here)
+
+    Returns
+    -------
+    G : Tensor, shape (B, N, d_out)
+        weighted neighbour vector for every agent
+    A : Tensor, shape (B, N, N)
+        softmax attention weights (for analysis)
+    """
+    def __init__(self, d_in: int = 41, d_a: int = 64, d_out: int = 32):
+        super().__init__()
+        # Linear projections for Query, Key, Value
+        self.W_q = nn.Linear(d_in, d_a, bias=False)
+        self.W_k = nn.Linear(d_in, d_a, bias=False)
+        self.W_v = nn.Linear(d_in, d_a, bias=False)
+        # Post-aggregation transform + ReLU (adds non-linearity, lets you
+        # pick any output size d_out ≠ d_a)
+        self.W_o = nn.Linear(d_a, d_out, bias=True)
+        self.scale = 1.0 / (d_a ** 0.5)        # √d_a : Transformer norm
+
+    def forward(self, H: torch.Tensor):
         """
-        Compute attention-based context vectors where the query comes from agent i,
-        and keys and values come from other agents j ≠ i.
-        
-        Args:
-            features: Tensor of shape (batch_size, num_agents, feature_dim)
-        
-        Returns:
-            context: Tensor of shape (batch_size, num_agents, feature_dim)
-                     Attention-applied output for each agent
+        H expected shape: [B, N, d_in]
         """
-        batch_size, num_agents, feature_dim = features.size()
-        
-        # Step 1: Compute query for each agent i
-        # Shape: (batch_size, num_agents, feature_dim)
-        q = self.W_q(features)
-        
-        # Step 2: Prepare indices to exclude self (agent i) for keys and values
-        # We will compute keys and values for all agents first, then mask out i
-        k = self.W_k(features)  # Shape: (batch_size, num_agents, feature_dim)
-        v = self.W_v(features)  # Shape: (batch_size, num_agents, feature_dim)
-        
-        # Step 3: Compute attention scores between q_i and k_j for all j
-        # Shape: (batch_size, num_agents, num_agents)
-        scores = torch.matmul(q, k.transpose(-2, -1)) / self.tau
-        
-        # Step 4: Mask out self-attention (where i == j)
-        # Create a diagonal mask: True where i == j
-        mask = torch.eye(num_agents, device=features.device).bool()
-        mask = mask.unsqueeze(0).expand(batch_size, -1, -1)  # Shape: (batch_size, num_agents, num_agents)
-        
-        # Set scores where i == j to a large negative value to exclude self
-        scores = scores.masked_fill(mask, -1e9)
-        
-        # Step 5: Compute attention weights using softmax
-        # Shape: (batch_size, num_agents, num_agents)
-        attention_weights = F.softmax(scores, dim=-1)
-        
-        # Step 6: Compute context vectors using values from other agents
-        # Multiply attention weights with values v_j
-        # Shape: (batch_size, num_agents, feature_dim)
-        context = torch.matmul(attention_weights, v)
-        
-        # Step 7: Apply ReLU activation to the context vectors
-        context = F.relu(context)
-        
-        return context    
+        # 1. Q, K, V projections
+        Q = self.W_q(H)        # [B, N, d_a]
+        K = self.W_k(H)        # [B, N, d_a]
+        V = self.W_v(H)        # [B, N, d_a]
+
+        # 2. Scaled dot-product attention scores
+        #    scores[b,i,j] = (q_i · k_j) / √d_a
+        scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale  # [B,N,N]
+
+        # 3. Mask the diagonal so each agent ignores itself
+        diag = torch.eye(scores.size(-1), dtype=torch.bool, device=scores.device)
+        scores.masked_fill_(diag.unsqueeze(0), float('-inf'))
+
+        # 4. Soft-max → weights
+        A = torch.softmax(scores, dim=-1)      # [B, N, N]
+
+        # 5. Weighted sum of neighbour values  ->  g_i
+        G = torch.matmul(A, V)                 # [B, N, d_a]
+
+        # 6. Final linear + ReLU 
+        G = torch.relu(self.W_o(G))            # [B, N, d_out]
+
+        return G, A.detach()   # return attention weights for logging
+
 
 # VAE
 class VAE(nn.Module):

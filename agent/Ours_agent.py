@@ -3,6 +3,7 @@ import numpy as np
 import torch.nn.functional as F
 
 class MacLight:
+
     def __init__(
         self,
         policy_net,
@@ -40,13 +41,14 @@ class MacLight:
         next_states = torch.tensor(transition_dict['next_states'][agent_name], dtype=torch.float).to(self.device)
         dones = torch.tensor(transition_dict['dones'][agent_name], dtype=torch.int).view(-1, 1).to(self.device)
     
-        if len(transition_dict['global_emb']) > 0:
-            global_emb = torch.tensor(transition_dict['global_emb'], dtype=torch.float)
+        # -------- get this agent's global-embedding sequence ----------
+        if transition_dict["global_emb"]: 
+            global_emb = transition_dict["global_emb"][agent_name].to(self.device).detach() 
         else:
             global_emb = None
 
-        td_target = rewards + self.gamma * self.critic(next_states, global_emb[1:]) * (1 - dones)
-        td_delta = td_target - self.critic(states, global_emb[:-1])
+        td_target = rewards + self.gamma * self.critic(next_states, global_emb) * (1 - dones)
+        td_delta = td_target - self.critic(states, global_emb)
         advantage = self.compute_advantage(self.gamma, self.lmbda, td_delta.cpu()).to(self.device)
         # 所谓的另一个演员就是原来的演员的初始状态
         old_log_probs = torch.log(self.actor(states).gather(1, actions)).detach()
@@ -57,10 +59,10 @@ class MacLight:
             surr1 = ratio * advantage  # 重要性采样
             surr2 = torch.clip(ratio, 1 - self.eps, 1 + self.eps) * advantage
             actor_loss = torch.mean(-torch.min(surr1, surr2))
-            critic_loss = torch.mean(F.mse_loss(self.critic(states, global_emb[:-1]), td_target.detach()))
+            critic_loss = torch.mean(F.mse_loss(self.critic(states, global_emb), td_target.detach()))
             self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
-            actor_loss.backward()
+            actor_loss.backward(retain_graph=True)
             critic_loss.backward()
             self.actor_optimizer.step()
             self.critic_optimizer.step()
