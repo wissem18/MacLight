@@ -97,7 +97,7 @@ def evaluate(args):
                          Time=time.strftime('%m-%d %H:%M:%S'),
                          InferenceTime=infer_time,
                          Seed=args.seed))
-        print(f"Episode {epi}:\n return: {cum_return:.2f}")
+        print(f"Episode {epi}:\nreturn: {cum_return:.2f}")
         print(f"Total Waiting Time: {rows[-1]['Waiting']}")
         print(f"Total Queue: {rows[-1]['Queue']}")
         print(f"Average speed: {rows[-1]['Speed']}")
