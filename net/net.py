@@ -105,7 +105,7 @@ class Attention(nn.Module):
         # 6. Final linear + ReLU 
         G = torch.relu(self.W_o(G))            # [B, N, d_out]
 
-        return G, A.detach()   # return attention weights for logging
+        return G, A.detach()   # return attention weights for analysis
 
 
 # VAE
