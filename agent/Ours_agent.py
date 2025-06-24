@@ -43,7 +43,7 @@ class MacLight:
     
         # -------- get this agent's global-embedding sequence ----------
         if transition_dict["global_emb"]: 
-            global_emb = transition_dict["global_emb"][agent_name].to(self.device).detach() 
+            global_emb = transition_dict["global_emb"][agent_name].to(self.device)
         else:
             global_emb = None
 
@@ -62,8 +62,7 @@ class MacLight:
             critic_loss = torch.mean(F.mse_loss(self.critic(states, global_emb), td_target.detach()))
             self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
-            actor_loss.backward(retain_graph=True)
-            critic_loss.backward()
+            (actor_loss + critic_loss).backward(retain_graph=True)
             self.actor_optimizer.step()
             self.critic_optimizer.step()
 

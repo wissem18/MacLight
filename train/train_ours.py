@@ -43,7 +43,7 @@ def train_ours_agent(
     best_score = -1e10
     actor_best_weight = {}
     critic_best_weight = {}
-    optimizer = optim.Adam(attention.parameters(), lr=1e-3) if attention else None
+    optimizer = optim.Adam(attention.parameters(), lr=5e-2) if attention else None
 
     for episode in range(total_episodes):
         epi_training = False
@@ -92,6 +92,15 @@ def train_ours_agent(
                 local = whole_state[t].to(device)        # (N,33)
                 feats = torch.cat([local, pos_feat], -1) # (N,41)
                 g, A = attention(feats.unsqueeze(0))     # (1,N,d_out),(1,N,N)
+                # Debug
+                with torch.no_grad():
+                    observations=attention.debug_H
+                    embedding_observations=attention.debug_embedded_H
+                    scores=attention.debug_scores
+                    print(f"local observation : {observations}")
+                    print(f"embedding observations : {embedding_observations}")
+                    print(scores.std(), scores.min(), scores.max())    
+
                 g = g[0]                                 # (N,d_out)
                 attn_accum += A[0]
                 for idx,a in enumerate(agent_name):
@@ -104,13 +113,12 @@ def train_ours_agent(
             transition_dict['global_emb'] = {a: torch.stack(lst) for a,lst in global_emb_per_agent.items()}
         
         # * ---- update agent and attention----
-        
+        optimizer.zero_grad() 
         for agt_name in agent_name:  # 更新网络
-            optimizer.zero_grad() 
             actor_loss, critic_loss = agents[agt_name].update(transition_dict, agt_name)
             actor_loss_list.append(actor_loss)  # 所有agent的loss放一起了
             critic_loss_list.append(critic_loss)
-            optimizer.step() 
+        optimizer.step()      
 
         # read best weights
         if episode_return > best_score:
@@ -131,7 +139,7 @@ def train_ours_agent(
                                     actor_loss_list, critic_loss_list, vae_loss_list=None, vae=None)
     if attn_weights_list:                                 # avoid empty list
         ep_stack = torch.stack(attn_weights_list)         # (E,16,16)  E = episodes
-        np.save(f"{ckpt_path}/attn_per_episode.npy", ep_stack.numpy().astype(np.float32))
+        np.save(f"{ckpt_path}/{seed}_attn_per_episode.npy", ep_stack.numpy().astype(np.float32))
     env.close()
     total_time = time.time() - start_time
     print(f"\033[32m[ Total time ]\033[0m {(total_time / 60):.2f} min")
