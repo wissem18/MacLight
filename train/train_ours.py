@@ -90,8 +90,8 @@ def train_ours_agent(
             attn_accum = torch.zeros(N, N, device=device) 
             for t in range(T):
                 local = whole_state[t].to(device)        # (N,33)
-                feats = torch.cat([local, pos_feat], -1) # (N,41)
-                g, A = attention(feats.unsqueeze(0))     # (1,N,d_out),(1,N,N)
+                #feats = torch.cat([local, pos_feat], -1) # (N,41)
+                g, A = attention(local.unsqueeze(0))     # (1,N,d_out),(1,N,N)
                 # Debug
                 with torch.no_grad():
                     observations=attention.debug_H
