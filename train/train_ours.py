@@ -43,7 +43,7 @@ def train_ours_agent(
     best_score = -1e10
     actor_best_weight = {}
     critic_best_weight = {}
-    optimizer = optim.Adam(attention.parameters(), lr=5e-2) if attention else None
+    optimizer = optim.Adam(attention.parameters(), lr=1e-2) if attention else None
 
     for episode in range(total_episodes):
         epi_training = False
@@ -97,8 +97,8 @@ def train_ours_agent(
                     observations=attention.debug_H
                     embedding_observations=attention.debug_embedded_H
                     scores=attention.debug_scores
-                    print(f"local observation : {observations}")
-                    print(f"embedding observations : {embedding_observations}")
+                    # print(f"local observation : {observations}")
+                    # print(f"embedding observations : {embedding_observations}")
                     print(scores.std(), scores.min(), scores.max())    
 
                 g = g[0]                                 # (N,d_out)

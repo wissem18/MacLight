@@ -42,7 +42,8 @@ class ObsEmbedding(nn.Module):
             nn.Linear(d_in, hidden_size),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_size, hidden_size),           # second hidden layer
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
+            nn.LayerNorm(32)
         )
         # output dim = 32
     def forward(self, x):                # x : (B,N,d_in)
