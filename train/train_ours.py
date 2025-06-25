@@ -6,6 +6,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from net.net import Attention
 
+torch.autograd.set_detect_anomaly(True)
+
 # declare the device
 global device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
