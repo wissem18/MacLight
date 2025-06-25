@@ -70,6 +70,7 @@ class MacLight:
             self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
             self.attention_optimizer.zero_grad()
+            torch.autograd.set_detect_anomaly(True)
             (actor_loss + critic_loss).backward(retain_graph=True)
             self.actor_optimizer.step()
             self.critic_optimizer.step()

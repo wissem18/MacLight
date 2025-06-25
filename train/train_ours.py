@@ -6,7 +6,6 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from net.net import Attention
 
-torch.autograd.set_detect_anomaly(True)
 
 # declare the device
 global device
@@ -96,13 +95,9 @@ def train_ours_agent(
                 # feats = torch.cat([local, pos_feat], -1) # (N,41)
                 g, A = attention(local.unsqueeze(0))     # (1,N,d_out),(1,N,N)
                 # Debug
-                with torch.no_grad():
-                    observations=attention.debug_H
-                    embedding_observations=attention.debug_embedded_H
-                    scores=attention.debug_scores
-                    # print(f"local observation : {observations}")
-                    # print(f"embedding observations : {embedding_observations}")
-                    print(scores.std(), scores.min(), scores.max())    
+                # with torch.no_grad():
+                #     scores=attention.debug_scores
+                #     print(scores.std(), scores.min(), scores.max())    
                 
                 g = g[0]                                 # (N,d_out)
                 attn_accum += A[0]

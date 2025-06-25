@@ -106,9 +106,7 @@ class Attention(nn.Module):
         """
         H expected shape: [B, N, d_in]
         """
-        self.debug_H=H.detach()
         H = self.embed(H)                     # (B,N,32)
-        self.debug_embedded_H=H.detach()
         # 1. Q, K, V projections
         Q = self.W_q(H)        # [B, N, d_a]
         K = self.W_k(H)        # [B, N, d_a]
@@ -117,10 +115,10 @@ class Attention(nn.Module):
         # 2. Scaled dot-product attention scores
         #    scores[b,i,j] = (q_i · k_j) / √d_a
         scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale  # [B,N,N]
-        self.debug_scores=scores.clone().detach()
+        #self.debug_scores=scores.detach().clone()
         # 3. Mask the diagonal so each agent ignores itself
         diag = torch.eye(scores.size(-1), dtype=torch.bool, device=scores.device)
-        scores = scores.masked_fill_(diag.unsqueeze(0), float('-inf'))
+        scores.masked_fill_(diag.unsqueeze(0), float('-inf'))
 
         # 4. Soft-max → weights
         A = torch.softmax(scores, dim=-1)      # [B, N, N]
