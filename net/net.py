@@ -120,7 +120,7 @@ class Attention(nn.Module):
         self.debug_scores=scores.clone().detach()
         # 3. Mask the diagonal so each agent ignores itself
         diag = torch.eye(scores.size(-1), dtype=torch.bool, device=scores.device)
-        scores.masked_fill_(diag.unsqueeze(0), float('-inf'))
+        scores = scores.masked_fill_(diag.unsqueeze(0), float('-inf'))
 
         # 4. Soft-max → weights
         A = torch.softmax(scores, dim=-1)      # [B, N, N]
