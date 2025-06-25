@@ -16,7 +16,7 @@ from env.wrap.random_block import BlockStreet
 from util.tools import MARLWrap
 import warnings
 warnings.filterwarnings('ignore')
-
+from transformers import get_cosine_schedule_with_warmup
 # * ---------------------- Parameters -------------------------
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Ours mission')
@@ -73,7 +73,23 @@ if __name__ == '__main__':
     system_type = sys.platform
 
     # ---------------------------- networks ------------------------------
-    attention = Attention(d_in=41, d_a=64, d_out=global_emb_dim).to(device) 
+    attention = Attention(d_in=33, d_a=64, d_out=global_emb_dim).to(device)
+    base_lr=1e-2
+    warmup_frac  = 0.1                         # 10 % warm-up
+    steps_per_ep = args.seconds//5              
+    total_steps  = args.episodes * steps_per_ep
+    warmup_steps = int(total_steps * warmup_frac)
+
+    optimizer = torch.optim.Adam(attention.parameters(), lr=base_lr)
+
+    scheduler = get_cosine_schedule_with_warmup(
+                optimizer          = optimizer,
+                num_warmup_steps   = warmup_steps,
+                num_training_steps = total_steps,
+                num_cycles         = 0.5)
+    alg_args.update({'attn'      : attention,
+                 'attn_opt'  : optimizer,
+                 'attn_sched': scheduler})
 
     marl = MARLWrap('I', MacLight, alg_args,
                     PolicyNet, ValueNet,
@@ -90,4 +106,4 @@ if __name__ == '__main__':
         np.random.seed(seed)
         torch.manual_seed(seed)
         return_list, train_time = train_ours_agent(env, marl, agent_name, attention, args.writer,
-                                                   args.episodes, seed, CKP_PATH, evaluator,global_emb_dim)
+                                                   args.episodes, seed, CKP_PATH, evaluator,steps_per_ep)

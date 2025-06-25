@@ -8,6 +8,9 @@ class MacLight:
         self,
         policy_net,
         critic_net,
+        attn,
+        attn_opt,
+        attn_sched,
         actor_lr: float=1e-4,
         critic_lr: float=5e-3,
         gamma: float=0.9,
@@ -16,6 +19,10 @@ class MacLight:
         eps: float=0.2,
         device: str='cpu',
     ):
+        #setting PPO and Attention parameters
+        self.attention=attn
+        self.attention_optimizer=attn_opt
+        self.attention_scheduler=attn_sched
         self.muti_agent = False
         self.actor = policy_net.to(device)
         self.critic = critic_net.to(device)
@@ -62,12 +69,21 @@ class MacLight:
             critic_loss = torch.mean(F.mse_loss(self.critic(states, global_emb), td_target.detach()))
             self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
+            self.attention_optimizer.zero_grad()
             (actor_loss + critic_loss).backward(retain_graph=True)
             self.actor_optimizer.step()
             self.critic_optimizer.step()
+            self.attention_optimizer.step()
+            self.attention_scheduler.step()
 
         return actor_loss.item(), critic_loss.item()
-
+    
+    # ---- utility -------------------------------------------------
+    def current_attn_lr(self):
+        if self.attention_optimizer is None:
+            return None
+        return self.attention_optimizer.param_groups[0]["lr"]
+    
     @staticmethod
     def compute_advantage(gamma, lmbda, td_delta):
         td_delta = td_delta.detach().numpy()
@@ -80,3 +96,5 @@ class MacLight:
         advantage_list = torch.tensor(np.array(advantage_list), dtype=torch.float)
         advantage_list = (advantage_list - advantage_list.mean()) / (advantage_list.std() + 1e-5)
         return advantage_list
+    
+    
