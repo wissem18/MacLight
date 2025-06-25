@@ -74,7 +74,7 @@ if __name__ == '__main__':
 
     # ---------------------------- networks ------------------------------
     attention = Attention(d_in=33, d_a=64, d_out=global_emb_dim).to(device)
-    base_lr=1e-2
+    base_lr=1e-3
     warmup_frac  = 0.1                         # 10 % warm-up
     steps_per_ep = args.seconds//5              
     total_steps  = args.episodes * steps_per_ep
