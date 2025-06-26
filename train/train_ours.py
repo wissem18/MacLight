@@ -5,7 +5,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from net.net import Attention
-
+from transformers import get_cosine_schedule_with_warmup
 
 # declare the device
 global device
@@ -45,7 +45,19 @@ def train_ours_agent(
     best_score = -1e10
     actor_best_weight = {}
     critic_best_weight = {}
- 
+    # Attention scheduler and optimizer parameters
+    base_lr=1e-3
+    warmup_frac  = 0.1                         # 10 % warm-up            
+    total_steps  = total_episodes * steps_per_ep
+    warmup_steps = int(total_steps * warmup_frac)
+
+    optimizer = torch.optim.Adam(attention.parameters(), lr=base_lr)
+
+    scheduler = get_cosine_schedule_with_warmup(
+                optimizer          = optimizer,
+                num_warmup_steps   = warmup_steps,
+                num_training_steps = total_steps,
+                num_cycles         = 0.5)
     
     for episode in range(total_episodes):
         epi_training = False
@@ -103,8 +115,7 @@ def train_ours_agent(
                 attn_accum += A[0]
                 for idx,a in enumerate(agent_name):
                     global_emb_per_agent[a].append(g[idx])
-                
-                lr_hist.append( agents[agent_name[0]].current_attn_lr() )
+            
             # store the mean attention score in each episode (over all timesteps)        
             mean_A = (attn_accum / T).cpu()                 
             attn_weights_list.append(mean_A)
@@ -112,11 +123,15 @@ def train_ours_agent(
             # convert lists -> tensors (T,d_out) and store
             transition_dict['global_emb'] = {a: torch.stack(lst) for a,lst in global_emb_per_agent.items()}
         
-        # * ---- update agent and attention--- 
+        # * ---- update agent and attention---
+        optimizer.zero_grad() 
         for agt_name in agent_name:  # 更新网络
             actor_loss, critic_loss = agents[agt_name].update(transition_dict, agt_name)
             actor_loss_list.append(actor_loss)  # 所有agent的loss放一起了
-            critic_loss_list.append(critic_loss)     
+            critic_loss_list.append(critic_loss)
+        optimizer.step()
+        scheduler.step() 
+        lr_hist.append(optimizer.param_groups[0]['lr'])
 
         # read best weights
         if episode_return > best_score:

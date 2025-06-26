@@ -16,7 +16,7 @@ from env.wrap.random_block import BlockStreet
 from util.tools import MARLWrap
 import warnings
 warnings.filterwarnings('ignore')
-from transformers import get_cosine_schedule_with_warmup
+
 # * ---------------------- Parameters -------------------------
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Ours mission')
@@ -45,6 +45,7 @@ if __name__ == '__main__':
     hidden_dim = [env.observation_space(i).shape[0] * 2 for i in agent_name]
     action_dim = [env.action_space(i).n for i in agent_name]
     global_emb_dim = 32
+    steps_per_ep=args.seconds//5
     if len(set(state_dim)) == 1:
         state_dim = state_dim[0]
         action_dim = action_dim[0]
@@ -74,23 +75,6 @@ if __name__ == '__main__':
 
     # ---------------------------- networks ------------------------------
     attention = Attention(d_in=33, d_a=64, d_out=global_emb_dim).to(device)
-    base_lr=1e-3
-    warmup_frac  = 0.1                         # 10 % warm-up
-    steps_per_ep = args.seconds//5              
-    total_steps  = args.episodes * steps_per_ep
-    warmup_steps = int(total_steps * warmup_frac)
-
-    optimizer = torch.optim.Adam(attention.parameters(), lr=base_lr)
-
-    scheduler = get_cosine_schedule_with_warmup(
-                optimizer          = optimizer,
-                num_warmup_steps   = warmup_steps,
-                num_training_steps = total_steps,
-                num_cycles         = 0.5)
-    alg_args.update({'attn'      : attention,
-                 'attn_opt'  : optimizer,
-                 'attn_sched': scheduler})
-
     marl = MARLWrap('I', MacLight, alg_args,
                     PolicyNet, ValueNet,
                     state_dim, hidden_dim, action_dim,
