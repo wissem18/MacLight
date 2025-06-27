@@ -8,6 +8,9 @@ class MacLight:
         self,
         policy_net,
         critic_net,
+        attn,
+        attn_opt,
+        attn_sched,
         actor_lr: float=1e-4,
         critic_lr: float=5e-3,
         gamma: float=0.9,
@@ -16,7 +19,10 @@ class MacLight:
         eps: float=0.2,
         device: str='cpu',
     ):
-        #setting PPO parameters
+        #setting PPO and Attention parameters
+        self.attention=attn
+        self.attention_optimizer=attn_opt
+        self.attention_scheduler=attn_sched
         self.muti_agent = False
         self.actor = policy_net.to(device)
         self.critic = critic_net.to(device)
@@ -42,7 +48,7 @@ class MacLight:
         next_states = torch.tensor(transition_dict['next_states'][agent_name], dtype=torch.float).to(self.device)
         dones = torch.tensor(transition_dict['dones'][agent_name], dtype=torch.int).view(-1, 1).to(self.device)
     
-        # -------- get the agent's global-embedding sequence ----------
+        # -------- get this agent's global-embedding sequence ----------
         if transition_dict["global_emb"]: 
             global_emb = transition_dict["global_emb"][agent_name].to(self.device)
         else:
@@ -63,11 +69,20 @@ class MacLight:
             critic_loss = torch.mean(F.mse_loss(self.critic(states, global_emb), td_target.detach()))
             self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
+            self.attention_optimizer.zero_grad()
             (actor_loss + critic_loss).backward(retain_graph=True)
             self.actor_optimizer.step()
             self.critic_optimizer.step()
+            self.attention_optimizer.step()
+            self.attention_scheduler.step()
 
         return actor_loss.item(), critic_loss.item()
+    
+    # ---- utility -------------------------------------------------
+    def current_attn_lr(self):
+        if self.attention_optimizer is None:
+            return None
+        return self.attention_optimizer.param_groups[0]["lr"]
     
     @staticmethod
     def compute_advantage(gamma, lmbda, td_delta):

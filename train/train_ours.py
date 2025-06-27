@@ -112,7 +112,7 @@ def train_ours_agent(
                 #     print(scores.std(), scores.min(), scores.max())    
                 
                 g = g[0]                                 # (N,d_out)
-                attn_accum += A[0]
+                attn_accum = attn_accum + A[0]
                 for idx,a in enumerate(agent_name):
                     global_emb_per_agent[a].append(g[idx])
             

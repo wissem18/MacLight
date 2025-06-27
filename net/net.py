@@ -40,9 +40,9 @@ class ObsEmbedding(nn.Module):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(d_in, hidden_size),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),           # second hidden layer
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.LayerNorm(32)
         )
         # output dim = 32
@@ -89,14 +89,14 @@ class Attention(nn.Module):
     A : Tensor, shape (B, N, N)
         softmax attention weights (for analysis)
     """
-    def __init__(self, d_in: int = 41, d_a: int = 64, d_out: int = 32):
+    def __init__(self, d_in: int = 33, d_a: int = 64, d_out: int = 32):
         super().__init__()
         # ----shared embedding ----
-        self.embed = ObsEmbedding(d_in, 32)   # 32-dim output
+        # self.embed = ObsEmbedding(d_in, 32)   # 32-dim output
         # Linear projections for Query, Key, Value
-        self.W_q = nn.Linear(32, d_a, bias=False)
-        self.W_k = nn.Linear(32, d_a, bias=False)
-        self.W_v = nn.Linear(32, d_a, bias=False)
+        self.W_q = nn.Linear(d_in, d_a, bias=False)
+        self.W_k = nn.Linear(d_in, d_a, bias=False)
+        self.W_v = nn.Linear(d_in, d_a, bias=False)
         # Post-aggregation transform + ReLU (adds non-linearity, lets you
         # pick any output size d_out ≠ d_a)
         self.W_o = nn.Linear(d_a, d_out, bias=True)
@@ -118,7 +118,7 @@ class Attention(nn.Module):
         #self.debug_scores=scores.detach().clone()
         # 3. Mask the diagonal so each agent ignores itself
         diag = torch.eye(scores.size(-1), dtype=torch.bool, device=scores.device)
-        scores.masked_fill(diag.unsqueeze(0), float('-inf'))
+        scores = scores.masked_fill(diag.unsqueeze(0), float('-inf'))
 
         # 4. Soft-max → weights
         A = torch.softmax(scores, dim=-1)      # [B, N, N]
@@ -127,7 +127,7 @@ class Attention(nn.Module):
         G = torch.matmul(A, V)                 # [B, N, d_a]
 
         # 6. Final linear + ReLU 
-        G = torch.relu(self.W_o(G))            # [B, N, d_out]
+        G = torch.relu(self.W_o(G.clone()))            # [B, N, d_out]
 
         return G, A.detach()   # return attention weights for analysis
 
