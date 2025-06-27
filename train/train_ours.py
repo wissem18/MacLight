@@ -11,13 +11,6 @@ from transformers import get_cosine_schedule_with_warmup
 global device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# ----- constant positional one-hots -----------------
-row = torch.tensor([0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3])
-col = torch.tensor([0,1,2,3]*4)
-
-pos_feat = torch.cat([F.one_hot(row,4),
-                      F.one_hot(col,4)], dim=-1).float().to(device)  # (16,8)
-
 def train_ours_agent(
     env: object,
     agents: object,
@@ -45,19 +38,7 @@ def train_ours_agent(
     best_score = -1e10
     actor_best_weight = {}
     critic_best_weight = {}
-    # Attention scheduler and optimizer parameters
-    base_lr=1e-3
-    warmup_frac  = 0.1                         # 10 % warm-up            
-    total_steps  = total_episodes * steps_per_ep
-    warmup_steps = int(total_steps * warmup_frac)
 
-    optimizer = torch.optim.Adam(attention.parameters(), lr=base_lr)
-
-    scheduler = get_cosine_schedule_with_warmup(
-                optimizer          = optimizer,
-                num_warmup_steps   = warmup_steps,
-                num_training_steps = total_steps,
-                num_cycles         = 0.5)
     
     for episode in range(total_episodes):
         epi_training = False
@@ -91,47 +72,17 @@ def train_ours_agent(
         speed_list.append(info[agent_name[0]]["system_mean_speed"])
         time_list.append(time.strftime('%m-%d %H:%M:%S', time.localtime()))
         seed_list.append(seed)
-
-         # ---- compute attention global embeddings ----
-        if attention:
-            # whole_state : [T, N, 33]  (T = number of time steps, N = 16)
-            whole_state = torch.stack(list(transition_dict['states'].values())).transpose(1,0)
-            T, N, _ = whole_state.shape
-
-            # per-agent list that will become tensor (T, d_out)
-            global_emb_per_agent = {a: [] for a in agent_name}
-
-            attn_accum = torch.zeros(N, N, device=device) 
-            for t in range(T):
-                local = whole_state[t].to(device)        # (N,33)
-                # feats = torch.cat([local, pos_feat], -1) # (N,41)
-                g, A = attention(local.unsqueeze(0))     # (1,N,d_out),(1,N,N)
-                # Debug
-                # with torch.no_grad():
-                #     scores=attention.debug_scores
-                #     print(scores.std(), scores.min(), scores.max())    
-                
-                g = g[0]                                 # (N,d_out)
-                attn_accum = attn_accum + A[0]
-                for idx,a in enumerate(agent_name):
-                    global_emb_per_agent[a].append(g[idx])
-            
-            # store the mean attention score in each episode (over all timesteps)        
-            mean_A = (attn_accum / T).cpu()                 
-            attn_weights_list.append(mean_A)
-
-            # convert lists -> tensors (T,d_out) and store
-            transition_dict['global_emb'] = {a: torch.stack(lst) for a,lst in global_emb_per_agent.items()}
         
-        # * ---- update agent and attention---
-        optimizer.zero_grad() 
+        # * ---- update agent and attention--- 
         for agt_name in agent_name:  # 更新网络
             actor_loss, critic_loss = agents[agt_name].update(transition_dict, agt_name)
             actor_loss_list.append(actor_loss)  # 所有agent的loss放一起了
             critic_loss_list.append(critic_loss)
-        optimizer.step()
-        scheduler.step() 
-        lr_hist.append(optimizer.param_groups[0]['lr'])
+
+        # update Attention score list for the analysis     
+        mean_A=agents[agent_name[0]].get_last_mean_attention()
+        if mean_A is not None: 
+            attn_weights_list.append(mean_A)
 
         # read best weights
         if episode_return > best_score:
@@ -150,11 +101,13 @@ def train_ours_agent(
         evaluator.evaluate_and_save(writer, return_list, waiting_list, queue_list, speed_list,
                                     time_list, seed_list, ckpt_path, episode, agents, seed,
                                     actor_loss_list, critic_loss_list, vae_loss_list=None, vae=None)
-        
+         
     #save attention weights and learning rate history for analysis
     if attn_weights_list:                                 
         ep_stack = torch.stack(attn_weights_list)         # (E,16,16)  E = episodes
         np.save(f"{ckpt_path}/{seed}_attn_per_episode.npy", ep_stack.numpy().astype(np.float32))
+        
+    lr_hist=agents[agent_name[0]].get_attn_lr_history()    
     if lr_hist:
         np.save(f"{ckpt_path}/{seed}_attn_lr_history.npy", np.array(lr_hist))
     env.close()

@@ -15,9 +15,9 @@ class PolicyNet(torch.nn.Module):
         x = F.relu(self.h_1(F.relu(self.fc1(x))))
         return F.softmax(self.fc2(x), dim=-1)
 
-
+# Add attention block for the ValueNet
 class ValueNet(torch.nn.Module):
-    def __init__(self, state_dim, hidden_dim, global_emb_dim=0):
+    def __init__(self, state_dim, hidden_dim,global_emb_dim=0):
         super().__init__()
         self.fc1 = torch.nn.Linear(state_dim+global_emb_dim, hidden_dim)
         self.h_1 = torch.nn.Linear(hidden_dim, hidden_dim)
@@ -92,7 +92,7 @@ class Attention(nn.Module):
     def __init__(self, d_in: int = 33, d_a: int = 64, d_out: int = 32):
         super().__init__()
         # ----shared embedding ----
-        # self.embed = ObsEmbedding(d_in, 32)   # 32-dim output
+        self.embed = ObsEmbedding(33, 32)   # 32-dim output
         # Linear projections for Query, Key, Value
         self.W_q = nn.Linear(d_in, d_a, bias=False)
         self.W_k = nn.Linear(d_in, d_a, bias=False)
@@ -115,7 +115,7 @@ class Attention(nn.Module):
         # 2. Scaled dot-product attention scores
         #    scores[b,i,j] = (q_i · k_j) / √d_a
         scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale  # [B,N,N]
-        #self.debug_scores=scores.detach().clone()
+        self.debug_scores=scores.detach().clone()
         # 3. Mask the diagonal so each agent ignores itself
         diag = torch.eye(scores.size(-1), dtype=torch.bool, device=scores.device)
         scores = scores.masked_fill(diag.unsqueeze(0), float('-inf'))

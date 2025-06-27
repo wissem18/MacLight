@@ -78,7 +78,7 @@ if __name__ == '__main__':
     base_lr=1e-3
     warmup_frac  = 0.1                         # 10 % warm-up
     steps_per_ep = args.seconds//5              
-    total_steps  = args.episodes * steps_per_ep
+    total_steps  = args.episodes * 10 #number of epochs
     warmup_steps = int(total_steps * warmup_frac)
 
     optimizer = torch.optim.Adam(attention.parameters(), lr=base_lr)
