@@ -1,148 +1,130 @@
-import torch
-import numpy as np
-import torch.nn.functional as F
+import torch, numpy as np, torch.nn.functional as F
+from net.net import attn_diagnostics                     # unchanged
 
 class MacLight:
+    def __init__(self, policy_net, critic_net,
+                 attn, attn_opt, attn_sched,
+                 actor_lr=1e-4, critic_lr=5e-3,
+                 gamma=0.9, lmbda=0.9, epochs=20, eps=0.2,
+                 device='cpu'):
 
-    def __init__(
-        self,
-        policy_net,
-        critic_net,
-        attn,
-        attn_opt,
-        attn_sched,
-        actor_lr: float=1e-4,
-        critic_lr: float=5e-3,
-        gamma: float=0.9,
-        lmbda: float=0.9,
-        epochs: int=20,
-        eps: float=0.2,
-        device: str='cpu',
-    ):
-        #setting PPO and Attention parameters
-        self.attention=attn
-        self.attention_optimizer=attn_opt
-        self.attention_scheduler=attn_sched
-        self.muti_agent = False
-        self.actor = policy_net.to(device)
-        self.critic = critic_net.to(device)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+        self.attention            = attn
+        self.attention_optimizer  = attn_opt
+        self.attention_scheduler  = attn_sched
+
+        self.actor   = policy_net.to(device)
+        self.critic  = critic_net.to(device)
+        self.actor_optimizer  = torch.optim.Adam(self.actor.parameters(),  lr=actor_lr)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
-        self.gamma = gamma  # 时序差分学习率
-        self.lmbda = lmbda
-        self.epochs = epochs  # 一条序列的数据用来训练轮数
-        self.eps = eps  # PPO中截断范围的参数
-        self.device = device
 
-        #setting variables for the analysis of the attention 
-        self.lr_history = []
-        self.last_mean_A = None
+        self.gamma, self.lmbda = gamma, lmbda
+        self.epochs, self.eps  = epochs, eps
+        self.device            = device
 
+        # ↓ for analysis / logging
+        self.lr_history, self.last_mean_A = [], None
+
+    # ───────────────────────────────────────────────────────────────
+    # take_action unchanged
+    # ───────────────────────────────────────────────────────────────
     def take_action(self, state):
-        state = torch.tensor(state, dtype=torch.float).to(self.device)
-        probs = self.actor(state)
-        action_dist = torch.distributions.Categorical(probs)
-        action = action_dist.sample()
+        state  = torch.tensor(state, dtype=torch.float32, device=self.device)
+        action = torch.distributions.Categorical(self.actor(state)).sample()
         return action.item()
-  
-    def update(self, transition_dict, agent_name, **kargs):
-        states = torch.tensor(transition_dict['states'][agent_name], dtype=torch.float).to(self.device)
-        actions = torch.tensor(transition_dict['actions'][agent_name], dtype=torch.int64).view(-1, 1).to(self.device)
-        rewards = torch.tensor(transition_dict['rewards'][agent_name], dtype=torch.float).view(-1, 1).to(self.device)
-        next_states = torch.tensor(transition_dict['next_states'][agent_name], dtype=torch.float).to(self.device)
-        dones = torch.tensor(transition_dict['dones'][agent_name], dtype=torch.int).view(-1, 1).to(self.device)
 
-        # ---------- whole-state tensors for ALL agents -------------------
-        agent_order = list(transition_dict["states"].keys())  # consistent order
-        idx = agent_order.index(agent_name)                   # this agent's slot
-        whole_state = torch.stack(
-            [
-                torch.tensor(
-                    transition_dict["states"][a],
-                    dtype=torch.float32,
-                    device=self.device,
-                )
-                for a in agent_order
-            ],
-            dim=1,
-        )  # shape (T, N, state_dim)
-        whole_next_state = torch.stack(
-            [
-                torch.tensor(
-                    transition_dict["next_states"][a],
-                    dtype=torch.float32,
-                    device=self.device,
-                )
-                for a in agent_order
-            ],
-            dim=1,
-        )  # (T, N, state_dim)
+    # ───────────────────────────────────────────────────────────────
+    # update  —  **new arg accumulate_attn_grad**
+    # ───────────────────────────────────────────────────────────────
+    def update(self, transition_dict, agent_name, accumulate_attn_grad=False):
+        """One agent’s PPO update.  
+        When *accumulate_attn_grad* is True, we do **not** zero-grad or
+        step the shared Attention optimiser – gradients just accumulate.
+        """
+        # ------------------------------------------------------------------
+        # 1. pull this agent’s local trajectory tensors
+        # ------------------------------------------------------------------
+        to_t = lambda x,dtype: torch.tensor(x, dtype=dtype, device=self.device)
+        states      = to_t(transition_dict['states'][agent_name]     , torch.float32)
+        actions     = to_t(transition_dict['actions'][agent_name]    , torch.int64 ).view(-1,1)
+        rewards     = to_t(transition_dict['rewards'][agent_name]    , torch.float32).view(-1,1)
+        next_states = to_t(transition_dict['next_states'][agent_name], torch.float32)
+        dones       = to_t(transition_dict['dones'][agent_name]      , torch.int32 ).view(-1,1)
+
+        # ------------------------------------------------------------------
+        # 2. build whole-state tensors (T, N, 33)  for shared Attention
+        # ------------------------------------------------------------------
+        agt_order = list(transition_dict['states'].keys())
+        idx       = agt_order.index(agent_name)
+        stack = lambda key: torch.stack([ to_t(transition_dict[key][a], torch.float32)
+                                          for a in agt_order ], dim=1)
+        whole_state       = stack('states')
+        whole_next_state  = stack('next_states')
 
         old_log_probs = torch.log(self.actor(states).gather(1, actions)).detach()
-        
-        # =================================================================
-        # PPO epochs
-        # =================================================================
+
+        # ------------------------------------------------------------------
+        # 3. PPO E epochs
+        # ------------------------------------------------------------------
         for epoch in range(self.epochs):
-            # :one: Fresh neighbour embeddings with CURRENT attention params
-            global_emb_all, A = self.attention(whole_state)        # (T,N,d_out)
-            global_emb = global_emb_all[:, idx, :]                 # (T,d_out)
-            global_emb_next_all, _ = self.attention(whole_next_state)
-            global_emb_next = global_emb_next_all[:, idx, :]       # (T,d_out)
-            # Debug print
-            scores = self.attention.debug_scores                    # (T,N,N)
-            print(f"[{agent_name}] epoch {epoch+1}/{self.epochs}  "
-                  f"std={scores.std():.4f}  min={scores.min():.4f}  "
-                  f"max={scores.max():.4f}")
-            # accumulate mean(A) for this epoch
-            self.last_mean_A = A.mean(dim=0).detach().cpu()
-        
-            # :two: Critic forward & targets
-            values_now = self.critic(states, global_emb)
-            values_next = self.critic(next_states, global_emb_next).detach()
-            td_target = rewards + self.gamma * values_next * (1 - dones)
-            td_delta = td_target - values_now
-            advantage = self.compute_advantage(
-                self.gamma, self.lmbda, td_delta.detach()
-            ).to(self.device)
-            # :three: Actor loss (PPO clip)
-            log_probs = torch.log(self.actor(states).gather(1, actions))
-            ratio = torch.exp(log_probs - old_log_probs)
-            surr1 = ratio * advantage
-            surr2 = torch.clamp(ratio, 1 - self.eps, 1 + self.eps) * advantage
-            actor_loss = -(torch.min(surr1, surr2)).mean()
-            # :four: Critic loss
-            critic_loss = F.mse_loss(values_now, td_target)
-            # :five: Back-prop —
+
+            g_all , A   = self.attention(whole_state)         # (T,N,d)
+            g_next_all,_= self.attention(whole_next_state)
+
+            g      = g_all      [:, idx, :]                   # (T,d)
+            g_next = g_next_all [:, idx, :]
+
+            if epoch == self.epochs-1:                                    # keep last A
+                self.last_A = A[-1].detach().cpu()
+            # Debug 
+            if epoch ==self.epochs-1 and idx == 0:
+                with torch.no_grad():
+                    S = self.last_A           # (16,16)   for last time-step
+                    row_mean = S.mean(dim=1)
+                    row_std  = S.std (dim=1)
+                    print("[dbg]  logits  μ∈[{:.2f},{:.2f}]  σ∈[{:.2f},{:.2f}]".format(
+                        row_mean.min(), row_mean.max(), row_std.min(), row_std.max()))
+                    print(f"[dbg]  current tau = {self.attention.tau.item():.3f}")
+
+
+            # critic targets / deltas
+            v_now  = self.critic(states, g)
+            v_next = self.critic(next_states, g_next).detach()
+            td_tgt = rewards + self.gamma * v_next * (1 - dones)
+            td_del = td_tgt - v_now
+            adv    = self.compute_advantage(self.gamma, self.lmbda,
+                                            td_del.detach()).to(self.device)
+
+            # losses
+            logp   = torch.log(self.actor(states).gather(1, actions))
+            ratio  = torch.exp(logp - old_log_probs)
+            actor_loss  = -(torch.min(ratio*adv,
+                                      torch.clamp(ratio,1-self.eps,1+self.eps)*adv)).mean()
+            critic_loss = F.mse_loss(v_now, td_tgt)
+
+            # backward
             self.actor_optimizer.zero_grad(set_to_none=True)
             self.critic_optimizer.zero_grad(set_to_none=True)
-            self.attention_optimizer.zero_grad(set_to_none=True)
+            if not accumulate_attn_grad:
+                self.attention_optimizer.zero_grad(set_to_none=True)
+
             (actor_loss + critic_loss).backward()
+
             self.actor_optimizer.step()
             self.critic_optimizer.step()
-            self.attention_optimizer.step()
-            self.attention_scheduler.step()
-            self.lr_history.append(self.attention_optimizer.param_groups[0]['lr'])
+            # >>>> Attention step happens **outside** when accumulate=True
 
         return actor_loss.item(), critic_loss.item()
-    
-    # ---- utility -------------------------------------------------
-    def get_attn_lr_history(self):
-        return self.lr_history
-    def get_last_mean_attention(self):
-        return self.last_mean_A
-    
+
+    # ---- helpers --------------------------------------------------------
+    def get_attn_lr_history(self):       return self.lr_history
+    def get_last_attention(self):   return self.last_A
+
     @staticmethod
     def compute_advantage(gamma, lmbda, td_delta):
-        td_delta = td_delta.detach().numpy()
-        advantage_list = []
-        advantage = 0.0
-        for delta in td_delta[::-1]:
-            advantage = gamma * lmbda * advantage + delta
-            advantage_list.append(advantage)
-        advantage_list.reverse()
-        advantage_list = torch.tensor(np.array(advantage_list), dtype=torch.float)
-        advantage_list = (advantage_list - advantage_list.mean()) / (advantage_list.std() + 1e-5)
-        return advantage_list
-    
-    
+        td = td_delta.cpu().numpy()
+        adv, out = 0.0, []
+        for delta in td[::-1]:
+            adv = gamma * lmbda * adv + delta
+            out.append(adv)
+        adv_ts = torch.tensor(out[::-1], dtype=torch.float32)
+        return (adv_ts - adv_ts.mean()) / (adv_ts.std() + 1e-5)

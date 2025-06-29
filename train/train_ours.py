@@ -16,6 +16,8 @@ def train_ours_agent(
     agents: object,
     agent_name: list,
     attention: Attention,
+    attention_optimizer,
+    attention_scheduler,
     writer: int,
     total_episodes: int,
     seed: int,
@@ -74,15 +76,22 @@ def train_ours_agent(
         seed_list.append(seed)
         
         # * ---- update agent and attention--- 
-        for agt_name in agent_name:  # 更新网络
-            actor_loss, critic_loss = agents[agt_name].update(transition_dict, agt_name)
-            actor_loss_list.append(actor_loss)  # 所有agent的loss放一起了
+        attention_optimizer.zero_grad()          # clear shared grads
+        for agt_name in agent_name:
+            actor_loss, critic_loss = agents[agt_name].update(
+                    transition_dict, agt_name,
+                    accumulate_attn_grad=True)   # ← grads accumulate
+            actor_loss_list.append(actor_loss)
             critic_loss_list.append(critic_loss)
 
-        # update Attention score list for the analysis     
-        mean_A=agents[agent_name[0]].get_last_mean_attention()
-        if mean_A is not None: 
-            attn_weights_list.append(mean_A)
+        attention_optimizer.step()               # single shared step
+        attention_scheduler.step()
+        
+        lr_hist.append(attention_optimizer.param_groups[0]['lr'])
+        # keep last A for logging
+        attn_weights_list.append(
+            agents[agent_name[0]].get_last_attention()
+        )
 
         # read best weights
         if episode_return > best_score:
@@ -106,8 +115,7 @@ def train_ours_agent(
     if attn_weights_list:                                 
         ep_stack = torch.stack(attn_weights_list)         # (E,16,16)  E = episodes
         np.save(f"{ckpt_path}/{seed}_attn_per_episode.npy", ep_stack.numpy().astype(np.float32))
-        
-    lr_hist=agents[agent_name[0]].get_attn_lr_history()    
+          
     if lr_hist:
         np.save(f"{ckpt_path}/{seed}_attn_lr_history.npy", np.array(lr_hist))
     env.close()

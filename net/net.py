@@ -89,10 +89,15 @@ class Attention(nn.Module):
     A : Tensor, shape (B, N, N)
         softmax attention weights (for analysis)
     """
-    def __init__(self, d_in: int = 33, d_a: int = 64, d_out: int = 32):
+    def __init__(self, d_in: int = 33, d_a: int = 64, d_out: int = 32 ,tau_init=0.50):
         super().__init__()
         # ----shared embedding ----
-        self.embed = ObsEmbedding(33, 32)   # 32-dim output
+        self.embed = ObsEmbedding(41, 32)   # 32-dim output
+        # constant 8-bit grid encoding
+        row = torch.tensor([0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3])
+        col = torch.tensor([0,1,2,3]*4)
+        self.register_buffer('pos_feat',
+            torch.cat([F.one_hot(row,4), F.one_hot(col,4)], dim=-1).float())
         # Linear projections for Query, Key, Value
         self.W_q = nn.Linear(d_in, d_a, bias=False)
         self.W_k = nn.Linear(d_in, d_a, bias=False)
@@ -101,21 +106,30 @@ class Attention(nn.Module):
         # pick any output size d_out ≠ d_a)
         self.W_o = nn.Linear(d_a, d_out, bias=True)
         self.scale = 1.0 / (d_a ** 0.5)        # √d_a : Transformer norm
+        self.tau   = nn.Parameter(torch.tensor(tau_init))   # τ < 1
 
     def forward(self, H: torch.Tensor):
         """
         H expected shape: [B, N, d_in]
         """
-        H = self.embed(H)                     # (B,N,32)
+        pos = self.pos_feat.to(H.device)          # (16,8) one-hots  (see below)
+        H = torch.cat([H, pos.unsqueeze(0).expand(H.size(0),-1,-1)], dim=-1)
+        H = self.embed(H)                    # (B,N,32)
         # 1. Q, K, V projections
         Q = self.W_q(H)        # [B, N, d_a]
         K = self.W_k(H)        # [B, N, d_a]
         V = self.W_v(H)        # [B, N, d_a]
-
+        # ---- cache projected vectors ---------------
+        self.debug_Q = Q.detach().cpu()               # (B,N,d_a)
+        self.debug_K = K.detach().cpu()
+        self.debug_V = V.detach().cpu()
         # 2. Scaled dot-product attention scores
         #    scores[b,i,j] = (q_i · k_j) / √d_a
         scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale  # [B,N,N]
-        self.debug_scores=scores.detach().clone()
+        # ---- NEW:  centre each row, then apply τ ------------------------------------------------
+        scores = scores - scores.mean(dim=-1, keepdim=True)          # remove bias c_i
+        scores = scores / self.tau.clamp(min=1e-3)                   # sharpen
+        self.debug_scores=scores.detach().cpu()
         # 3. Mask the diagonal so each agent ignores itself
         diag = torch.eye(scores.size(-1), dtype=torch.bool, device=scores.device)
         scores = scores.masked_fill(diag.unsqueeze(0), float('-inf'))
@@ -127,11 +141,25 @@ class Attention(nn.Module):
         G = torch.matmul(A, V)                 # [B, N, d_a]
 
         # 6. Final linear + ReLU 
-        G = torch.relu(self.W_o(G.clone()))            # [B, N, d_out]
+        G = torch.relu(self.W_o(G))            # [B, N, d_out]
 
         return G, A.detach()   # return attention weights for analysis
 
+# helper to debug attention
+def attn_diagnostics(att_module, tag=""):
+    Q = att_module.debug_Q[0]        # (N,d_a) first batch
+    K = att_module.debug_K[0]
+    A = att_module.debug_scores[0]   # (N,N)  pre-softmax
 
+    print(f"\n{tag} ----- Attention diagnostics -----")
+    print("Q-norm  mean:{:.3f}  std:{:.3f}".format(Q.norm(dim=1).mean(),
+                                                   Q.norm(dim=1).std()))
+    print("pairwise Q cosine  std:{:.3f}".format(
+          torch.nn.functional.cosine_similarity(Q.unsqueeze(1), Q.unsqueeze(0), dim=-1)
+          .cpu().view(-1).std()))
+    print("raw scores  row-std  mean:{:.3f}  global std:{:.3f}".format(
+          A.std(dim=1).mean(), A.std()))
+    
 # VAE
 class VAE(nn.Module):
     def __init__(self, state_dim=33, latent_dim=16):
