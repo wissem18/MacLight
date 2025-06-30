@@ -76,14 +76,7 @@ class MacLight:
             if epoch == self.epochs-1:                                    # keep last A
                 self.last_A = A[-1].detach().cpu()
             # Debug 
-            if epoch ==self.epochs-1 and idx == 0:
-                with torch.no_grad():
-                    S = self.last_A           # (16,16)   for last time-step
-                    row_mean = S.mean(dim=1)
-                    row_std  = S.std (dim=1)
-                    print("[dbg]  logits  μ∈[{:.2f},{:.2f}]  σ∈[{:.2f},{:.2f}]".format(
-                        row_mean.min(), row_mean.max(), row_std.min(), row_std.max()))
-                    print(f"[dbg]  current tau = {self.attention.tau.item():.3f}")
+            
 
 
             # critic targets / deltas
