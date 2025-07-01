@@ -49,7 +49,7 @@ class Evaluator:
         return_save['Actor loss'] = sum(actor_loss_list) / len(actor_loss_list) if actor_loss_list else None
         return_save['Critic loss'] = sum(critic_loss_list) / len(critic_loss_list) if critic_loss_list else None
         return_save['VAE loss'] = vae_loss_list if actor_loss_list else None
-        return_save["Log time"] = time_list
+        return_save["Log time"] = (time.time()- self.time_flag) / 60
         if writer > 0:
             if agent is not None:
                 save_dict = {"agent": agent}
