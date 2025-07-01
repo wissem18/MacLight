@@ -88,9 +88,6 @@ if __name__ == '__main__':
                 num_warmup_steps   = warmup_steps,
                 num_training_steps = total_steps,
                 num_cycles         = 0.5)
-    alg_args.update({'attn'      : attention,
-                 'attn_opt'  : optimizer,
-                 'attn_sched': scheduler})
 
     marl = MARLWrap('I', MacLight, alg_args,
                     PolicyNet, ValueNet,

@@ -3,14 +3,9 @@ from net.net import attn_diagnostics                     # unchanged
 
 class MacLight:
     def __init__(self, policy_net, critic_net,
-                 attn, attn_opt, attn_sched,
                  actor_lr=1e-4, critic_lr=5e-3,
                  gamma=0.9, lmbda=0.9, epochs=20, eps=0.2,
                  device='cpu'):
-
-        self.attention            = attn
-        self.attention_optimizer  = attn_opt
-        self.attention_scheduler  = attn_sched
 
         self.actor   = policy_net.to(device)
         self.critic  = critic_net.to(device)
@@ -35,7 +30,7 @@ class MacLight:
     # ───────────────────────────────────────────────────────────────
     # update  —  **new arg accumulate_attn_grad**
     # ───────────────────────────────────────────────────────────────
-    def update(self, transition_dict, agent_name, accumulate_attn_grad=False):
+    def update(self, transition_dict, agent_name,attention, accumulate_attn_grad=False):
         """One agent’s PPO update.  
         When *accumulate_attn_grad* is True, we do **not** zero-grad or
         step the shared Attention optimiser – gradients just accumulate.
@@ -67,8 +62,8 @@ class MacLight:
         # ------------------------------------------------------------------
         for epoch in range(self.epochs):
 
-            g_all , A   = self.attention(whole_state)         # (T,N,d)
-            g_next_all,_= self.attention(whole_next_state)
+            g_all , A   = attention(whole_state)         # (T,N,d)
+            g_next_all,_= attention(whole_next_state)
 
             g      = g_all      [:, idx, :]                   # (T,d)
             g_next = g_next_all [:, idx, :]
@@ -97,8 +92,6 @@ class MacLight:
             # backward
             self.actor_optimizer.zero_grad(set_to_none=True)
             self.critic_optimizer.zero_grad(set_to_none=True)
-            if not accumulate_attn_grad:
-                self.attention_optimizer.zero_grad(set_to_none=True)
 
             (actor_loss + critic_loss).backward()
 

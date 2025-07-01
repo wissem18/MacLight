@@ -79,7 +79,7 @@ def train_ours_agent(
         attention_optimizer.zero_grad()          # clear shared grads
         for agt_name in agent_name:
             actor_loss, critic_loss = agents[agt_name].update(
-                    transition_dict, agt_name,
+                    transition_dict, agt_name,attention,
                     accumulate_attn_grad=True)   # ← grads accumulate
             actor_loss_list.append(actor_loss)
             critic_loss_list.append(critic_loss)
