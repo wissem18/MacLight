@@ -5,3 +5,4 @@ pip install sumo-rl
 pip install gymnasium
 pip install pettingzoo
 pip install torch_geometric
+pip install torch torchvision torchaudio
