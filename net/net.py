@@ -92,12 +92,7 @@ class Attention(nn.Module):
     def __init__(self, d_in: int = 33, d_a: int = 64, d_out: int = 32 ,tau_init=0.50):
         super().__init__()
         # ----shared embedding ----
-        self.embed = ObsEmbedding(41, 32)   # 32-dim output
-        # constant 8-bit grid encoding
-        row = torch.tensor([0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3])
-        col = torch.tensor([0,1,2,3]*4)
-        self.register_buffer('pos_feat',
-            torch.cat([F.one_hot(row,4), F.one_hot(col,4)], dim=-1).float())
+        self.embed = ObsEmbedding(33, 32)   # 32-dim output
         # Linear projections for Query, Key, Value
         self.W_q = nn.Linear(d_in, d_a, bias=False)
         self.W_k = nn.Linear(d_in, d_a, bias=False)
@@ -112,8 +107,6 @@ class Attention(nn.Module):
         """
         H expected shape: [B, N, d_in]
         """
-        pos = self.pos_feat.to(H.device)          # (16,8) one-hots  (see below)
-        H = torch.cat([H, pos.unsqueeze(0).expand(H.size(0),-1,-1)], dim=-1)
         H = self.embed(H)                    # (B,N,32)
         # 1. Q, K, V projections
         Q = self.W_q(H)        # [B, N, d_a]
