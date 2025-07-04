@@ -14,7 +14,7 @@ from agent.Ours_agent import MacLight
 from tqdm import trange
 from net.net import PolicyNet, ValueNet, Attention
 from env.wrap.random_block import BlockStreet
-from util.tools import MARLWrap
+from util.tools import MARLWrap,build_adj_matrix
 import warnings
 warnings.filterwarnings('ignore')
 from transformers import get_cosine_schedule_with_warmup
@@ -74,7 +74,8 @@ if __name__ == '__main__':
     system_type = sys.platform
 
     # ---------------------------- networks ------------------------------
-    attention = Attention(d_in=32, d_a=64, d_out=global_emb_dim).to(device)
+    adj_mask  = build_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
+    attention = Attention(d_in=32, d_a=64, d_out=global_emb_dim,adj_mask=adj_mask).to(device)
     base_lr=1e-2
     warmup_frac  = 0.1                         # 10 % warm-up
     steps_per_ep = args.seconds//5              

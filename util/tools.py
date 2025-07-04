@@ -2,6 +2,39 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from typing import List, Tuple, Dict
+import sumolib 
+
+def build_adj_matrix(net_file: str, agent_ids) -> torch.BoolTensor:
+    """
+    Parameters
+    ----------
+    net_file : path to the SUMO network file
+    agent_ids   : iterable[str] – env.possible_agents (agent ids)
+
+    Returns
+    -------
+    adj : BoolTensor shape (N, N)
+          adj[i, j] == True  ⇔  there exists an edge between agent i and agent j 
+          (Undirected → matrix is symmetric; self-loops are False.)
+    """
+    # ---- read the network ------------------------------------------------
+    net     = sumolib.net.readNet(net_file)
+    id2idx  = {tid: i for i, tid in enumerate(agent_ids)}
+    N       = len(agent_ids)
+    adj     = torch.zeros((N, N), dtype=torch.bool)
+
+    # ---- walk through every edge in the graph ---------------------------------
+    for edge in net.getEdges():  
+        u_id = edge.getFromNode().getID()   # junction id at edge origin
+        v_id = edge.getToNode().getID()     # junction id at edge target
+
+        # only keep edges where *both* ends are traffic-light agents
+        if u_id in id2idx and v_id in id2idx and u_id != v_id:
+            i, j       = id2idx[u_id], id2idx[v_id]
+            adj[i, j]  = True
+            adj[j, i]  = True               # undirected / symmetric
+    
+    return adj
 
 def get_action(time: int, flag: int, action_space: dict, action_dict: dict, agent_name: object):
     '''fixed-time 用，每 flag 秒切换一次所有相位'''

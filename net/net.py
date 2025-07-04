@@ -89,7 +89,7 @@ class Attention(nn.Module):
     A : Tensor, shape (B, N, N)
         softmax attention weights (for analysis)
     """
-    def __init__(self, d_in: int = 33, d_a: int = 64, d_out: int = 32 ,tau_init=0.50):
+    def __init__(self, d_in: int = 33, d_a: int = 64, d_out: int = 32 ,tau_init=0.50,adj_mask: torch.BoolTensor=None):
         super().__init__()
         # ----shared embedding ----
         self.embed = ObsEmbedding(33, 32)   # 32-dim output
@@ -102,6 +102,14 @@ class Attention(nn.Module):
         self.W_o = nn.Linear(d_a, d_out, bias=True)
         self.scale = 1.0 / (d_a ** 0.5)        # √d_a : Transformer norm
         self.tau   = nn.Parameter(torch.tensor(tau_init))   # τ < 1
+        # adj_mask has 1 ↔ “can attend”, 0 ↔ “forbid” (also zeros on diagonal).
+        # We flip it so that True means “set this logit to -inf”.
+        if adj_mask is not None:
+            forbid = ~adj_mask              # BoolTensor: True where *not* allowed
+            self.register_buffer("attn_mask", forbid.unsqueeze(0))  # (1,N,N)
+        else:
+           self.attn_mask = None
+
 
     def forward(self, H: torch.Tensor):
         """
@@ -123,9 +131,11 @@ class Attention(nn.Module):
         scores = scores - scores.mean(dim=-1, keepdim=True)          # remove bias c_i
         scores = scores / self.tau.clamp(min=1e-3)                   # sharpen
         self.debug_scores=scores.detach().cpu()
-        # 3. Mask the diagonal so each agent ignores itself
-        diag = torch.eye(scores.size(-1), dtype=torch.bool, device=scores.device)
-        scores = scores.masked_fill(diag.unsqueeze(0), float('-inf'))
+        # 3. Mask the forbidden agents 
+        if self.attn_mask is not None:
+            if self.attn_mask.device != scores.device:     # safety net
+                raise RuntimeError("attn_mask and scores on different devices")
+            scores = scores.masked_fill(self.attn_mask, float('-inf'))
 
         # 4. Soft-max → weights
         A = torch.softmax(scores, dim=-1)      # [B, N, N]
