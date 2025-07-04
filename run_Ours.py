@@ -56,7 +56,7 @@ if __name__ == '__main__':
         else:
             args.block_num = None
 
-        args.model_name = 'Ours_Attention'
+        args.model_name = 'Ours_Attention_Adj'
         args.task = args.task + '_' + args.level
     
 
