@@ -36,6 +36,14 @@ def build_adj_matrix(net_file: str, agent_ids) -> torch.BoolTensor:
     
     return adj
 
+def adj_to_edge_index(adj: torch.BoolTensor) -> torch.LongTensor:
+    """
+    adj : (N,N) BoolTensor – 1 ↔ edge exists (no self-loops)
+    returns edge_index : (2,E) LongTensor for PyG GATConv
+    """
+    src, dst = adj.nonzero(as_tuple=True)        # indices of 1s
+    return torch.stack([src, dst], dim=0)        # shape (2,E)
+
 def get_action(time: int, flag: int, action_space: dict, action_dict: dict, agent_name: object):
     '''fixed-time 用，每 flag 秒切换一次所有相位'''
     if time % flag == 0 and time > 0:

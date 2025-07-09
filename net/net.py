@@ -48,120 +48,49 @@ class ObsEmbedding(nn.Module):
         # output dim = 32
     def forward(self, x):                # x : (B,N,d_in)
         return self.mlp(x)               # (B,N,32)
+    
 
-# ------------------------------------------------------------------
-# Single-head (fully-connected) neighbour Attention
-# ------------------------------------------------------------------
-#  • H contains *local+positional* tokens for ALL 16 intersections
-#    of the grid at the current time-step.
-#  • For each intersection i we want a **global embedding** g_i that is
-#    a weighted combination of the OTHER intersections’ features.
-#  • We forbid self-attention (i → i) by masking the diagonal.
-#  • Output dimension d_out is configurable (here 32).  This is the
-#    vector you will later concatenate with the 33-dim local state
-#    before feeding the critic / actor.
-#
-#  Tunable hyper-params
-#  --------------------
-#  d_in   : dim of each input token (33 local + 8 pos = 41 in our setup)
-#  d_a    : hidden/“attention” size used for Q,K,V projections
-#           (64 is a standard small value;)
-#  d_out  : size of final global vector g_i  (32)
-#
-# ------------------------------------------------------------------
-class Attention(nn.Module):
+class GATBlock(nn.Module):
     """
-    Parameters
-    ----------
-    d_in  : int   dimension of input token  (default 41)
-    d_a   : int   dimension of Q / K / V projections (default 64)
-    d_out : int   dimension of aggregated neighbour vector (default 32)
-
-    Forward
-    -------
-    H : Tensor, shape (B, N, d_in)
-        B = batch ; N = number of agents (16 here)
-
-    Returns
-    -------
-    G : Tensor, shape (B, N, d_out)
-        weighted neighbour vector for every agent
-    A : Tensor, shape (B, N, N)
-        softmax attention weights (for analysis)
+    Sparse multi-head Graph Attention.
     """
-    def __init__(self, d_in: int = 33, d_a: int = 64, d_out: int = 32 ,tau_init=0.50,adj_mask: torch.BoolTensor=None):
+    def __init__(self, d_in=33, d_out=32, heads=4,
+                 edge_index=None, dropout=0.1):
         super().__init__()
-        # ----shared embedding ----
-        self.embed = ObsEmbedding(33, 32)   # 32-dim output
-        # Linear projections for Query, Key, Value
-        self.W_q = nn.Linear(d_in, d_a, bias=False)
-        self.W_k = nn.Linear(d_in, d_a, bias=False)
-        self.W_v = nn.Linear(d_in, d_a, bias=False)
-        # Post-aggregation transform + ReLU (adds non-linearity, lets you
-        # pick any output size d_out ≠ d_a)
-        self.W_o = nn.Linear(d_a, d_out, bias=True)
-        self.scale = 1.0 / (d_a ** 0.5)        # √d_a : Transformer norm
-        self.tau   = nn.Parameter(torch.tensor(tau_init))   # τ < 1
-        # adj_mask has 1 ↔ “can attend”, 0 ↔ “forbid” (also zeros on diagonal).
-        # We flip it so that True means “set this logit to -inf”.
-        if adj_mask is not None:
-            forbid = ~adj_mask              # BoolTensor: True where *not* allowed
-            self.register_buffer("attn_mask", forbid.unsqueeze(0))  # (1,N,N)
-        else:
-           self.attn_mask = None
+        assert edge_index is not None, "edge_index required"
+        self.register_buffer("edge_index", edge_index)      # (2,E), no grad
+        self.embed = ObsEmbedding(d_in=d_in,hidden_size=32)
 
+        # Each head outputs d_out / heads features, concatenated → d_out
+        self.gat = GATConv(
+            in_channels=32,
+            out_channels=d_out // heads,
+            heads=heads,
+            dropout=dropout,
+            add_self_loops=False
+        )
 
-    def forward(self, H: torch.Tensor):
-        """
-        H expected shape: [B, N, d_in]
-        """
-        H = self.embed(H)                    # (B,N,32)
-        # 1. Q, K, V projections
-        Q = self.W_q(H)        # [B, N, d_a]
-        K = self.W_k(H)        # [B, N, d_a]
-        V = self.W_v(H)        # [B, N, d_a]
-        # ---- cache projected vectors ---------------
-        self.debug_Q = Q.detach().cpu()               # (B,N,d_a)
-        self.debug_K = K.detach().cpu()
-        self.debug_V = V.detach().cpu()
-        # 2. Scaled dot-product attention scores
-        #    scores[b,i,j] = (q_i · k_j) / √d_a
-        scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale  # [B,N,N]
-        # ---- NEW:  centre each row, then apply τ ------------------------------------------------
-        scores = scores - scores.mean(dim=-1, keepdim=True)          # remove bias c_i
-        scores = scores / self.tau.clamp(min=1e-3)                   # sharpen
-        self.debug_scores=scores.detach().cpu()
-        # 3. Mask the forbidden agents 
-        if self.attn_mask is not None:
-            if self.attn_mask.device != scores.device:     # safety net
-                raise RuntimeError("attn_mask and scores on different devices")
-            scores = scores.masked_fill(self.attn_mask, float('-inf'))
+    def forward(self, H):               # H: (B, N, d_in)
+        B, N, _ = H.size()
+        H = self.embed(H)
+        out = []
+        attn = []
+        h_=self.gat.heads
+        for b in range(B):
+            # out_b : (N,d_out)   α_b : (E,heads)
+            out_b, (e_idx, α_b) = self.gat(
+                    H[b], self.edge_index, return_attention_weights=True)
 
-        # 4. Soft-max → weights
-        A = torch.softmax(scores, dim=-1)      # [B, N, N]
+            # α_b : (E, H)  →   build dense (H, N, N) where H is the number of heads
+            A_dense = torch.zeros(h_, N, N, device=H.device)
+            for i in range(h_):
+                A_dense[i][e_idx[0], e_idx[1]] = α_b[:, i]
 
-        # 5. Weighted sum of neighbour values  ->  g_i
-        G = torch.matmul(A, V)                 # [B, N, d_a]
+            out.append(out_b)
+            attn.append(A_dense)             
 
-        # 6. Final linear + ReLU 
-        G = torch.relu(self.W_o(G))            # [B, N, d_out]
-
-        return G, A.detach()   # return attention weights for analysis
-
-# helper to debug attention
-def attn_diagnostics(att_module, tag=""):
-    Q = att_module.debug_Q[0]        # (N,d_a) first batch
-    K = att_module.debug_K[0]
-    A = att_module.debug_scores[0]   # (N,N)  pre-softmax
-
-    print(f"\n{tag} ----- Attention diagnostics -----")
-    print("Q-norm  mean:{:.3f}  std:{:.3f}".format(Q.norm(dim=1).mean(),
-                                                   Q.norm(dim=1).std()))
-    print("pairwise Q cosine  std:{:.3f}".format(
-          torch.nn.functional.cosine_similarity(Q.unsqueeze(1), Q.unsqueeze(0), dim=-1)
-          .cpu().view(-1).std()))
-    print("raw scores  row-std  mean:{:.3f}  global std:{:.3f}".format(
-          A.std(dim=1).mean(), A.std()))
+        return torch.stack(out, 0), torch.stack(attn, 0)   # (B,N,d) , (B,H,N,N)
+    
     
 # VAE
 class VAE(nn.Module):

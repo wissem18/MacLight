@@ -1,11 +1,11 @@
 import time
+import os
 import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
-from net.net import Attention
-from transformers import get_cosine_schedule_with_warmup
+from net.net import GATBlock
 
 # declare the device
 global device
@@ -15,9 +15,9 @@ def train_ours_agent(
     env: object,
     agents: object,
     agent_name: list,
-    attention: Attention,
-    attention_optimizer,
-    attention_scheduler,
+    gat: GATBlock,
+    gat_optimizer,
+    gat_scheduler,
     writer: int,
     total_episodes: int,
     seed: int,
@@ -35,7 +35,6 @@ def train_ours_agent(
     speed_list = []
     time_list = []
     seed_list = []
-    lr_hist = []
     start_time = time.time()
     best_score = -1e10
     actor_best_weight = {}
@@ -76,21 +75,20 @@ def train_ours_agent(
         seed_list.append(seed)
         
         # * ---- update agent and attention--- 
-        attention_optimizer.zero_grad()          # clear shared grads
+        gat_optimizer.zero_grad()          # clear shared grads
         for agt_name in agent_name:
             actor_loss, critic_loss = agents[agt_name].update(
-                    transition_dict, agt_name,attention,
+                    transition_dict, agt_name,gat,
                     accumulate_attn_grad=True)   # ← grads accumulate
             actor_loss_list.append(actor_loss)
             critic_loss_list.append(critic_loss)
 
-        attention_optimizer.step()               # single shared step
-        attention_scheduler.step()
+        gat_optimizer.step()               # single shared step
+        gat_scheduler.step()
         
-        lr_hist.append(attention_optimizer.param_groups[0]['lr'])
-        # keep last A for logging
+    
         attn_weights_list.append(
-            agents[agent_name[0]].get_last_attention()
+            agents[agent_name[0]].get_full_attention()
         )
 
         # read best weights
@@ -111,13 +109,12 @@ def train_ours_agent(
                                     time_list, seed_list, ckpt_path, episode, agents, seed,
                                     actor_loss_list, critic_loss_list, vae_loss_list=None, vae=None)
          
-    #save attention weights and learning rate history for analysis
-    if attn_weights_list:                                 
-        ep_stack = torch.stack(attn_weights_list)         # (E,16,16)  E = episodes
-        np.save(f"{ckpt_path}/{seed}_attn_per_episode.npy", ep_stack.numpy().astype(np.float32))
-          
-    if lr_hist:
-        np.save(f"{ckpt_path}/{seed}_attn_lr_history.npy", np.array(lr_hist))
+    #save attention weights for analysis
+    if attn_weights_list: 
+        save_path=f"{ckpt_path}/{seed}_gat_full_attn.fp16.npz"                                
+        att_stack = torch.stack(attn_weights_list)        
+        np.savez_compressed(save_path, att_stack.numpy())
+        print(f"saved raw attention tensor → {os.path.getsize(save_path)/1e6:.1f} MB")  
     env.close()
     total_time = time.time() - start_time
     print(f"\033[32m[ Total time ]\033[0m {(total_time / 60):.2f} min")

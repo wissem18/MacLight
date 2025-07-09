@@ -1,5 +1,4 @@
 import torch, numpy as np, torch.nn.functional as F
-from net.net import attn_diagnostics                     # unchanged
 
 class MacLight:
     def __init__(self, policy_net, critic_net,
@@ -16,8 +15,7 @@ class MacLight:
         self.epochs, self.eps  = epochs, eps
         self.device            = device
 
-        # ↓ for analysis / logging
-        self.lr_history, self.last_mean_A = [], None
+
 
     # ───────────────────────────────────────────────────────────────
     # take_action unchanged
@@ -32,8 +30,6 @@ class MacLight:
     # ───────────────────────────────────────────────────────────────
     def update(self, transition_dict, agent_name,attention, accumulate_attn_grad=False):
         """One agent’s PPO update.  
-        When *accumulate_attn_grad* is True, we do **not** zero-grad or
-        step the shared Attention optimiser – gradients just accumulate.
         """
         # ------------------------------------------------------------------
         # 1. pull this agent’s local trajectory tensors
@@ -69,7 +65,7 @@ class MacLight:
             g_next = g_next_all [:, idx, :]
 
             if epoch == self.epochs-1:                                    # keep last A
-                self.last_A = A[-1].detach().cpu()
+                self.full_A = A.detach().cpu().to(torch.float16)  # (T,H,N,N) 
             # Debug 
             
 
@@ -103,7 +99,7 @@ class MacLight:
 
     # ---- helpers --------------------------------------------------------
     def get_attn_lr_history(self):       return self.lr_history
-    def get_last_attention(self):   return self.last_A
+    def get_full_attention(self):   return self.full_A
 
     @staticmethod
     def compute_advantage(gamma, lmbda, td_delta):

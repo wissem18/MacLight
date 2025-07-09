@@ -12,9 +12,9 @@ from train.Evaluator import Evaluator
 from train.train_ours import train_ours_agent
 from agent.Ours_agent import MacLight
 from tqdm import trange
-from net.net import PolicyNet, ValueNet, Attention
+from net.net import PolicyNet, ValueNet, GATBlock
 from env.wrap.random_block import BlockStreet
-from util.tools import MARLWrap,build_adj_matrix
+from util.tools import MARLWrap,build_adj_matrix,adj_to_edge_index
 import warnings
 warnings.filterwarnings('ignore')
 from transformers import get_cosine_schedule_with_warmup
@@ -56,7 +56,7 @@ if __name__ == '__main__':
         else:
             args.block_num = None
 
-        args.model_name = 'Ours_Attention'
+        args.model_name = 'Ours_GAT'
         args.task = args.task + '_' + args.level
     
 
@@ -75,14 +75,16 @@ if __name__ == '__main__':
 
     # ---------------------------- networks ------------------------------
     adj_mask  = build_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
-    attention = Attention(d_in=32, d_a=64, d_out=global_emb_dim,adj_mask=adj_mask).to(device)
-    base_lr=1e-2
+    edge_index = adj_to_edge_index(adj_mask).to(device)
+    gat = GATBlock(d_in=33, d_out=global_emb_dim, heads=4, edge_index= edge_index, dropout=0.1).to(device)
+    
+    base_lr=1e-3
     warmup_frac  = 0.1                         # 10 % warm-up
     steps_per_ep = args.seconds//5              
     total_steps  = args.episodes
     warmup_steps = int(total_steps * warmup_frac)
 
-    optimizer = torch.optim.Adam(attention.parameters(), lr=base_lr)
+    optimizer = torch.optim.Adam(gat.parameters(), lr=base_lr)
 
     scheduler = get_cosine_schedule_with_warmup(
                 optimizer          = optimizer,
@@ -104,5 +106,5 @@ if __name__ == '__main__':
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
-        return_list, train_time = train_ours_agent(env, marl, agent_name, attention,optimizer,scheduler,  args.writer,
+        return_list, train_time = train_ours_agent(env, marl, agent_name, gat,optimizer,scheduler,  args.writer,
                                                    args.episodes, seed, CKP_PATH, evaluator,steps_per_ep)
