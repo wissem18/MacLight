@@ -92,8 +92,12 @@ class TwoHopGATBlock(nn.Module):
 
             # build dense attention (heads,H,N,N) from 2-hop α_b
             A_dense = torch.zeros(self.heads, N, N, device=H.device)
-            for h in range(self.heads):
-                A_dense[h][e_idx[0], e_idx[1]] = α_b[:, h]
+            for i in range(self.heads):
+                A_dense[i].index_put_((e_idx[0], e_idx[1]),
+                                  α_b[:, i],
+                                  accumulate=True)
+            # renormalise rows
+            A_dense = A_dense / A_dense.sum(-1, keepdim=True).clamp(min=1e-9)
 
             outs.append(h_out)
             attn.append(A_dense)
