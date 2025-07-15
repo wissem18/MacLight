@@ -12,7 +12,7 @@ from train.Evaluator import Evaluator
 from train.train_ours import train_ours_agent
 from agent.Ours_agent import MacLight
 from tqdm import trange
-from net.net import PolicyNet, ValueNet, GATBlock
+from net.net import PolicyNet, ValueNet, TwoHopGATBlock
 from env.wrap.random_block import BlockStreet
 from util.tools import MARLWrap,build_adj_matrix,adj_to_edge_index
 import warnings
@@ -56,7 +56,7 @@ if __name__ == '__main__':
         else:
             args.block_num = None
 
-        args.model_name = 'Ours_GAT'
+        args.model_name = 'Ours_2hop_GAT'
         args.task = args.task + '_' + args.level
     
 
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     # ---------------------------- networks ------------------------------
     adj_mask  = build_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
     edge_index = adj_to_edge_index(adj_mask).to(device)
-    gat = GATBlock(d_in=33, d_out=global_emb_dim, heads=4, edge_index= edge_index, dropout=0.1).to(device)
+    gat = TwoHopGATBlock(d_in=33, d_mid=32, d_out=global_emb_dim, heads=4, edge_index= edge_index, dropout=0.1).to(device)
     
     base_lr=1e-3
     warmup_frac  = 0.1                         # 10 % warm-up

@@ -5,7 +5,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
-from net.net import GATBlock
+from net.net import TwoHopGATBlock
 
 # declare the device
 global device
@@ -15,7 +15,7 @@ def train_ours_agent(
     env: object,
     agents: object,
     agent_name: list,
-    gat: GATBlock,
+    gat: TwoHopGATBlock,
     gat_optimizer,
     gat_scheduler,
     writer: int,

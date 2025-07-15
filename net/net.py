@@ -50,46 +50,56 @@ class ObsEmbedding(nn.Module):
         return self.mlp(x)               # (B,N,32)
     
 
-class GATBlock(nn.Module):
-    """
-    Sparse multi-head Graph Attention.
-    """
-    def __init__(self, d_in=33, d_out=32, heads=4,
+# ------------------------------------------------------------------
+# Two-hop GATv2 block  (embed → GAT → ReLU → GAT → +residual → LN)
+# ------------------------------------------------------------------
+class TwoHopGATBlock(nn.Module):
+    def __init__(self, d_in=33, d_mid=32, d_out=32, heads=4,
                  edge_index=None, dropout=0.1):
         super().__init__()
         assert edge_index is not None, "edge_index required"
-        self.register_buffer("edge_index", edge_index)      # (2,E), no grad
-        self.embed = ObsEmbedding(d_in=d_in,hidden_size=32)
+        self.register_buffer("edge_index", edge_index)      # (2,E)
+        self.embed = ObsEmbedding(d_in, 32)                 # 32-d embed
 
-        # Each head outputs d_out / heads features, concatenated → d_out
-        self.gat = GATConv(
-            in_channels=32,
-            out_channels=d_out // heads,
-            heads=heads,
-            dropout=dropout,
-            add_self_loops=False
-        )
+        # 1-hop
+        self.gat1 = GATConv(32, d_mid // heads, heads=heads,
+                            dropout=dropout, add_self_loops=False)
 
-    def forward(self, H):               # H: (B, N, d_in)
+        # 2-hop
+        self.gat2 = GATConv(d_mid, d_out // heads, heads=heads,
+                            dropout=dropout, add_self_loops=False)
+
+        self.norm = nn.LayerNorm(d_out)                     # residual-LN
+        self.heads = heads
+
+    def forward(self, H):           # H : (B,N,d_in)
         B, N, _ = H.size()
-        H = self.embed(H)
-        out = []
-        attn = []
-        h_=self.gat.heads
+        H = self.embed(H)           # (B,N,32)
+
+        outs, attn = [], []
         for b in range(B):
-            # out_b : (N,d_out)   α_b : (E,heads)
-            out_b, (e_idx, α_b) = self.gat(
-                    H[b], self.edge_index, return_attention_weights=True)
+            # ----- first layer (1-hop) ----------------------------
+            h1, _ = self.gat1(H[b], self.edge_index,
+                              return_attention_weights=True)
+            h1 = F.relu(h1)
 
-            # α_b : (E, H)  →   build dense (H, N, N) where H is the number of heads
-            A_dense = torch.zeros(h_, N, N, device=H.device)
-            for i in range(h_):
-                A_dense[i][e_idx[0], e_idx[1]] = α_b[:, i]
+            # ----- second layer (2-hop) ---------------------------
+            h2, (e_idx, α_b) = self.gat2(
+                    h1, self.edge_index, return_attention_weights=True)
 
-            out.append(out_b)
-            attn.append(A_dense)             
+            # ----- residual + LayerNorm ---------------------------
+            h_out = self.norm(h1 + h2)          # (N,d_out)
 
-        return torch.stack(out, 0), torch.stack(attn, 0)   # (B,N,d) , (B,H,N,N)
+            # build dense attention (heads,H,N,N) from 2-hop α_b
+            A_dense = torch.zeros(self.heads, N, N, device=H.device)
+            for h in range(self.heads):
+                A_dense[h][e_idx[0], e_idx[1]] = α_b[:, h]
+
+            outs.append(h_out)
+            attn.append(A_dense)
+
+        return torch.stack(outs, 0), torch.stack(attn, 0)
+
     
     
 # VAE
