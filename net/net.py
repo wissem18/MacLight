@@ -83,8 +83,13 @@ class GATBlock(nn.Module):
 
             # α_b : (E, H)  →   build dense (H, N, N) where H is the number of heads
             A_dense = torch.zeros(h_, N, N, device=H.device)
+            
             for i in range(h_):
-                A_dense[i][e_idx[0], e_idx[1]] = α_b[:, i]
+                A_dense[i].index_put_((e_idx[0], e_idx[1]),
+                                  α_b[:, i],
+                                  accumulate=True)
+            # renormalise rows
+            A_dense = A_dense / A_dense.sum(-1, keepdim=True).clamp(min=1e-9)
 
             out.append(out_b)
             attn.append(A_dense)             
