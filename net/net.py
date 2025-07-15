@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATv2Conv as GATConv
+from torch_geometric.nn import GATConv
 
 
 class PolicyNet(torch.nn.Module):
