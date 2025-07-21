@@ -53,13 +53,29 @@ def train_ours_agent(
 
         # * ---- execute simulation ----
         state, done, truncated = env.reset(seed=seed)[0], False, False
+        # init prev-action/reward at episode start
+        for agt in agent_name:
+            agents[agt].last_action[agt] = 0
+            agents[agt].last_reward[agt] = 0.0
+       
         while not done | truncated:
+            # augment the current raw observation with previous a/r
+            aug_state = {a: agents[a]._augment(state[a], a) for a in agent_name}
+            # choose action from that same augmented state
             action = {}
             for agt_name in agent_name:
-                action[agt_name] = agents[agt_name].take_action(state[agt_name])
+                action[agt_name] = agents[agt_name].take_action(state[agt_name],agt_name)
+            # step the env
             next_state, reward, done, truncated, info = env.step(action)
-            transition_dict = update_transition(agent_name, epi_training, transition_dict, state,
-                                                    done, action, next_state, reward)
+            # now current (action, reward) become “previous” for the next step
+            for a in agent_name:
+                agents[a].last_action[a] = action[a]
+                agents[a].last_reward[a] = reward[a]
+            # augment the next raw observation with the new prev a/r
+            aug_next_state = {a: agents[a]._augment(next_state[a], a) for a in agent_name}
+            # store transition
+            transition_dict = update_transition(agent_name, epi_training, transition_dict, aug_state,
+                                                    done, action, aug_next_state, reward)
             epi_training = True
             state = next_state
             episode_return += np.mean(list(reward.values()))

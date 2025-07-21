@@ -43,13 +43,14 @@ if __name__ == '__main__':
     # Neural Networks
     agent_name = env.possible_agents
     global_emb_dim = 32
-    state_dim = [env.observation_space(i).shape[0] for i in agent_name]
-    hidden_dim = [(env.observation_space(i).shape[0]+global_emb_dim) * 2 for i in agent_name]
     action_dim = [env.action_space(i).n for i in agent_name]
+    state_dim_raw = [env.observation_space(i).shape[0] for i in agent_name]
+    state_dim = [sd + ad + 1 for sd, ad in zip(state_dim_raw, action_dim)]
+    hidden_dim = [(sd + global_emb_dim) * 2  for sd in state_dim]
     if len(set(state_dim)) == 1:
-        state_dim = state_dim[0]
-        action_dim = action_dim[0]
-        hidden_dim = hidden_dim[0]
+        state_dim = int(state_dim[0])
+        action_dim = int(action_dim[0])
+        hidden_dim = int(hidden_dim[0])
 
         if args.task == 'block':
             env = BlockStreet(env, args.block_num, args.seconds)
@@ -76,7 +77,7 @@ if __name__ == '__main__':
     # ---------------------------- networks ------------------------------
     adj_mask  = build_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
     edge_index = adj_to_edge_index(adj_mask).to(device)
-    gat = GATBlock(d_in=33, d_out=global_emb_dim, heads=4, edge_index= edge_index, dropout=0.1).to(device)
+    gat = GATBlock(d_out=global_emb_dim, heads=4,a_dim=8, edge_index= edge_index, dropout=0.1).to(device)
     
     base_lr=1e-3
     warmup_frac  = 0.1                         # 10 % warm-up
@@ -91,7 +92,6 @@ if __name__ == '__main__':
                 num_warmup_steps   = warmup_steps,
                 num_training_steps = total_steps,
                 num_cycles         = 0.5)
-
     marl = MARLWrap('I', MacLight, alg_args,
                     PolicyNet, ValueNet,
                     state_dim, hidden_dim, action_dim,

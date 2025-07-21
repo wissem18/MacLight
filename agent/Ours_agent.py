@@ -1,4 +1,5 @@
 import torch, numpy as np, torch.nn.functional as F
+from collections import defaultdict
 
 class MacLight:
     def __init__(self, policy_net, critic_net,
@@ -15,13 +16,26 @@ class MacLight:
         self.epochs, self.eps  = epochs, eps
         self.device            = device
 
-
+        self.last_action = defaultdict(int)     # prev action index
+        self.last_reward = defaultdict(float)   # prev reward scalar
 
     # ───────────────────────────────────────────────────────────────
-    # take_action unchanged
+    # helper: augment observation with prev-action / prev-reward
     # ───────────────────────────────────────────────────────────────
-    def take_action(self, state):
-        state  = torch.tensor(state, dtype=torch.float32, device=self.device)
+    def _augment(self, obs_np, agt_id):
+        """
+        [ raw-obs (33) ‖ one-hot(prev-action) ‖ prev-reward ]
+        """
+        obs   = np.asarray(obs_np,  dtype=np.float32)
+        a_dim = self.actor.fc2.out_features
+        onehot = np.zeros(a_dim, dtype=np.float32)
+        onehot[self.last_action[agt_id]] = 1.0
+        rew = np.array([self.last_reward[agt_id]], dtype=np.float32)
+        return np.concatenate([obs, onehot, rew], axis=-1)   
+
+    def take_action(self, state_np, agt_id):
+        aug = self._augment(state_np, agt_id)                      # NumPy (42,)
+        state = torch.tensor(aug, dtype=torch.float32, device=self.device)
         action = torch.distributions.Categorical(self.actor(state)).sample()
         return action.item()
 

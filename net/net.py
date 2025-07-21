@@ -28,38 +28,67 @@ class ValueNet(torch.nn.Module):
         x = F.relu(self.h_1(F.relu(self.fc1(x))))
         return self.fc2(x)
 
+# ---------- NEW: Feature-fusion à la X-Light ------------------------------
+class FeatureFusion(nn.Module):
+    """Self-attend over 3 token types: obs ‖ prev-action ‖ prev-reward."""
+    def __init__(self, d_model=16, d_out=32):
+        super().__init__()
+        self.q = nn.Parameter(torch.randn(3, d_model))      # (3,d)
+        self.k = nn.Linear(d_model, d_model, bias=False)
+        self.v = nn.Linear(d_model, d_model, bias=False)
+        self.proj = nn.Linear(d_model, d_out)
+
+    def forward(self, tokens):                # (B,N,3,d_model)
+        Q = self.q                            # (3,d)
+        K = self.k(tokens)                    # (B,N,3,d)
+        V = self.v(tokens)                    # (B,N,3,d)
+        attn = (Q @ K.transpose(-1, -2)) / (tokens.size(-1) ** 0.5)   # (3,3)
+        w = attn.softmax(-1)                                          # (3,3)
+        fused = (w @ V).mean(-2)               # (B,N,d_model)
+        return self.proj(F.relu(fused))        # (B,N,d_out)
+
 # ------------------------------------------------------------------
 # Observation → Embedding   (2 × 32-unit MLP + ReLU)
 # ------------------------------------------------------------------
 class ObsEmbedding(nn.Module):
     """
-    Embeds the local observation
-    Hidden size = 32 
+    X-Light style:   [ local-obs(33) | prev-action(one-hot) | prev-reward ]
+    Each slice → 16-d, self-attn fuse → post-proj (Linear+ReLU+LN) → 32.
     """
-    def __init__(self, d_in: int, hidden_size: int = 32):
+    def __init__(self, d_obs=33, a_dim=8, d_model=16, d_out=32):
         super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(d_in, hidden_size),
+        self.a_dim = a_dim
+        self.fc_s = nn.Linear(d_obs,  d_model)
+        self.fc_a = nn.Linear(a_dim,  d_model)
+        self.fc_r = nn.Linear(1,      d_model)
+        self.fuse = FeatureFusion(d_model, d_out)
+
+        # post-projection
+        self.post = nn.Sequential(
+            nn.Linear(d_out, d_out),
             nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),           # second hidden layer
-            nn.ReLU(),
-            nn.LayerNorm(32)
+            nn.LayerNorm(d_out)
         )
-        # output dim = 32
-    def forward(self, x):                # x : (B,N,d_in)
-        return self.mlp(x)               # (B,N,32)
+
+    def forward(self, x):                       # x : (B,N, 33 + a_dim + 1)
+        s, a, r = torch.split(x, [33, self.a_dim, 1], dim=-1)
+        tokens = torch.stack([self.fc_s(s), self.fc_a(a), self.fc_r(r)], dim=-2)
+        z = self.fuse(tokens)                  # (B,N,32)
+        return self.post(z)                    # (B,N,32)   <-- final
     
 
 class GATBlock(nn.Module):
     """
     Sparse multi-head Graph Attention.
     """
-    def __init__(self, d_in=33, d_out=32, heads=4,
+    def __init__(self, d_out=32, heads=4, a_dim=8,
                  edge_index=None, dropout=0.1):
         super().__init__()
         assert edge_index is not None, "edge_index required"
         self.register_buffer("edge_index", edge_index)      # (2,E), no grad
-        self.embed = ObsEmbedding(d_in=d_in,hidden_size=32)
+        # --- X-Light style embedding we defined earlier ----------
+        self.embed = ObsEmbedding(d_obs=33, a_dim=a_dim,    # d_model=16 by default
+                                  d_model=16, d_out=32)
 
         # Each head outputs d_out / heads features, concatenated → d_out
         self.gat = GATConv(
