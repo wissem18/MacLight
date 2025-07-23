@@ -133,7 +133,7 @@ class EdgeScorer(nn.Module):
         feat   = torch.cat([h[self.src], h[self.dst]], dim=1)   # (E,2h)
         score  = torch.sigmoid(self.mlp(feat).squeeze())        # (E,)
 
-        keep   = per_row_topk(score, self.src, index=self.k)    # indices kept
+        keep   = per_row_topk(score, self.src, self.k)    # indices kept
         edge_i = torch.stack([self.src[keep], self.dst[keep]], 0)
         return edge_i, score[keep]
         
@@ -167,7 +167,8 @@ class DynamicGNN(nn.Module):
                                  out_channels=out_dim // heads,
                                  heads=heads,
                                  dropout=dropout,
-                                 add_self_loops=False)
+                                 add_self_loops=False,
+                                 edge_dim=1)
         self.device  = device
         # allocate hidden state (will be zeroed by reset())
         self.memory.reset(num_nodes=len(edge_candidates[0].unique()), device=device)
@@ -201,10 +202,10 @@ class DynamicGNN(nn.Module):
 
             # 2. dynamic edge set for this step
             edge_idx, w = self.scorer(h_nodes)         # (2,E), (E,)
-
+            edge_attr = w.unsqueeze(1)    
             # 3. GATv2 (out_b : (N,hid_dim_out))
             out_b, (ei, α_b) = self.gat(
-                h_nodes, edge_idx, edge_weight=w,
+                h_nodes, edge_idx, edge_attr=edge_attr,
                 return_attention_weights=True)
 
             # 4. dense α   →  (heads,N,N)
