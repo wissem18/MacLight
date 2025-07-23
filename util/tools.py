@@ -3,6 +3,37 @@ import torch
 import torch.nn as nn
 from typing import List, Tuple, Dict
 import sumolib 
+import scipy.sparse as sp 
+
+def build_two_hop_adj_matrix(net_file: str, agent_ids) -> torch.BoolTensor:
+    """
+    Build a ≤ 2-hop adjacency matrix for the traffic-light agents.
+
+    Parameters
+    ----------
+    net_file   : str
+        Path to the SUMO .net.xml file.
+    agent_ids  : iterable[str]
+        IDs of traffic-light-controlled junctions (env.possible_agents).
+
+    Returns
+    -------
+    adj_2hop : BoolTensor, shape (N, N)
+        adj_2hop[i, j] == True  ⇔  there exists a path of length 1 or 2
+        between agents i and j (undirected, self-loops cleared).
+    """
+    # 1-hop adjacency (re-use the existing helper)
+    adj_1hop = build_adj_matrix(net_file, agent_ids)         # (N, N) bool
+
+    # Compute 2-hop reachability:  A² = (A¹ @ A¹) > 0
+    A1 = adj_1hop.to(torch.float32)                          # cast for matmul
+    A2 = (A1 @ A1) > 0                                       # boolean matrix
+
+    # Union of 1- and 2-hop edges, without self-loops
+    adj_2hop = (adj_1hop | A2).clone()
+    adj_2hop.fill_diagonal_(False)
+
+    return adj_2hop
 
 def build_adj_matrix(net_file: str, agent_ids) -> torch.BoolTensor:
     """

@@ -1,8 +1,9 @@
+from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv as GATConv
-
+from torch_scatter import topk as scatter_topk
 
 class PolicyNet(torch.nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
@@ -50,52 +51,146 @@ class ObsEmbedding(nn.Module):
         return self.mlp(x)               # (B,N,32)
     
 
-class GATBlock(nn.Module):
+# -----------------------------------------------------------------------------#
+# 2.  PER-NODE 12-STEP GRU MEMORY (shared weights, N hidden vectors)            #
+# -----------------------------------------------------------------------------#
+class NodeMemory(nn.Module):
     """
-    Sparse multi-head Graph Attention.
+    One GRUCell whose weights are shared by all agents.
+    Hidden state tensor h ∈ ℝ^{N×H} is stored inside the module.
+    Call .reset(N, device) at the beginning of every episode.
     """
-    def __init__(self, d_in=33, d_out=32, heads=4,
-                 edge_index=None, dropout=0.1):
+    def __init__(self, in_dim: int, hid_dim: int = 64, tbptt: int = 12):
         super().__init__()
-        assert edge_index is not None, "edge_index required"
-        self.register_buffer("edge_index", edge_index)      # (2,E), no grad
-        self.embed = ObsEmbedding(d_in=d_in,hidden_size=32)
+        self.gru   = nn.GRUCell(in_dim, hid_dim)
+        self.h     = None            # (N,H) – filled by reset()
+        self.t     = 0
+        self.tbptt = tbptt
 
-        # Each head outputs d_out / heads features, concatenated → d_out
-        self.gat = GATConv(
-            in_channels=32,
-            out_channels=d_out // heads,
-            heads=heads,
-            dropout=dropout,
-            add_self_loops=False
+    def reset(self, num_nodes: int, device):
+        self.h = torch.zeros(num_nodes, self.gru.hidden_size, device=device)
+        self.t = 0
+
+    def forward(self, e_t: torch.Tensor):     # e_t : (N,in_dim)
+        if (self.t % self.tbptt) == 0:
+            self.h = self.h.detach()          # truncate BPTT every 12 steps
+        self.h = self.gru(e_t, self.h)
+        self.t += 1
+        return self.h                         # (N,hid_dim)
+    
+# ------------------------------------------------------------
+# 3. LEARNABLE EDGE SCORER  (MAGSAC-style)
+# ------------------------------------------------------------
+class EdgeScorer(nn.Module):
+    """
+    edge_candidates : tuple(src,dst) – indices of ≤2-hop pairs (torch tensors)
+    k               : keep at most k neighbours per source node every step
+    """
+    def __init__(self,
+                 h_dim: int,
+                 edge_candidates: Tuple[torch.Tensor, torch.Tensor],
+                 k: int = 4):
+        super().__init__()
+        self.register_buffer('src', edge_candidates[0])
+        self.register_buffer('dst', edge_candidates[1])
+        self.k = k
+        self.mlp = nn.Sequential(
+            nn.Linear(2 * h_dim, 64), nn.ReLU(),
+            nn.Linear(64, 1)
         )
 
-    def forward(self, H):               # H: (B, N, d_in)
-        B, N, _ = H.size()
-        H = self.embed(H)
-        out = []
-        attn = []
-        h_=self.gat.heads
+    def forward(self, h: torch.Tensor):
+        """
+        h : (N, h_dim) – node hidden states
+        Returns
+        -------
+        edge_index : (2,E_kept)
+        edge_w     : (E_kept,)   – soft weights in [0,1]
+        """
+        feat   = torch.cat([h[self.src], h[self.dst]], dim=1)   # (E,2h)
+        score  = torch.sigmoid(self.mlp(feat).squeeze())        # (E,)
+
+        keep   = scatter_topk(score, self.k, index=self.src)    # indices kept
+        edge_i = torch.stack([self.src[keep], self.dst[keep]], 0)
+        return edge_i, score[keep]
+        
+# ------------------------------------------------------------
+# 4. DYNAMIC GNN LAYER  (Embed ➜ Node-GRU ➜ EdgeScorer ➜ GATv2)
+# ------------------------------------------------------------
+class DynamicGNN(nn.Module):
+    """
+    forward(H)  where H is (B,N,d_in)
+
+    returns:
+        out   : (B,N,hid_dim)
+        attn  : (B, heads, N, N)   – dense softmaxed attention
+    """
+    def __init__(self,
+                 obs_dim: int = 33,
+                 hid_dim: int = 64,
+                 out_dim: int = 32,
+                 heads: int = 4,
+                 edge_candidates: Tuple[torch.Tensor, torch.Tensor] = None,
+                 k: int = 4,
+                 dropout: float = 0.1,
+                 device: str = 'cpu'):
+        super().__init__()
+        assert edge_candidates is not None, "edge_candidates required"
+
+        self.embed   = ObsEmbedding(obs_dim, 32)
+        self.memory  = NodeMemory(32, hid_dim)
+        self.scorer  = EdgeScorer(hid_dim, edge_candidates, k)
+        self.gat     = GATConv(in_channels=hid_dim,
+                                 out_channels=out_dim // heads,
+                                 heads=heads,
+                                 dropout=dropout,
+                                 add_self_loops=False)
+        self.device  = device
+        # allocate hidden state (will be zeroed by reset())
+        self.memory.reset(num_nodes=len(edge_candidates[0].unique()), device=device)
+
+    def reset_memory(self):
+        self.memory.reset(num_nodes=self.memory.h.size(0), device=self.device)
+
+    # --------------------------------------------------------------------- #
+    def _dense_attn(self, e_idx, alpha, N, H):
+        """
+        Build (H,N,N) dense attention from sparse α (E,H).
+        """
+        A = torch.zeros(H, N, N, device=alpha.device)
+        for h in range(H):
+            A[h].index_put_((e_idx[0], e_idx[1]), alpha[:, h], accumulate=True)
+        A = A / A.sum(-1, keepdim=True).clamp(min=1e-9)
+        return A
+    # --------------------------------------------------------------------- #
+
+    def forward(self, H_t: torch.Tensor):
+        """
+        H_t : (B, N, obs_dim)
+        """
+        B, N, _ = H_t.size()
+        H_emb   = self.embed(H_t)          # (B,N,32)
+        outs, attns = [], []
+
         for b in range(B):
-            # out_b : (N,d_out)   α_b : (E,heads)
-            out_b, (e_idx, α_b) = self.gat(
-                    H[b], self.edge_index, return_attention_weights=True)
+            # 1. update per-node memory (shared across batch dims)
+            h_nodes = self.memory(H_emb[b])            # (N,hid_dim)
 
-            # α_b : (E, H)  →   build dense (H, N, N) where H is the number of heads
-            A_dense = torch.zeros(h_, N, N, device=H.device)
-            
-            for i in range(h_):
-                A_dense[i].index_put_((e_idx[0], e_idx[1]),
-                                  α_b[:, i],
-                                  accumulate=True)
-            # renormalise rows
-            A_dense = A_dense / A_dense.sum(-1, keepdim=True).clamp(min=1e-9)
+            # 2. dynamic edge set for this step
+            edge_idx, w = self.scorer(h_nodes)         # (2,E), (E,)
 
-            out.append(out_b)
-            attn.append(A_dense)             
+            # 3. GATv2 (out_b : (N,hid_dim_out))
+            out_b, (ei, α_b) = self.gat(
+                h_nodes, edge_idx, edge_weight=w,
+                return_attention_weights=True)
 
-        return torch.stack(out, 0), torch.stack(attn, 0)   # (B,N,d) , (B,H,N,N)
-    
+            # 4. dense α   →  (heads,N,N)
+            attn_dense = self._dense_attn(ei, α_b, N, self.gat.heads)
+
+            outs.append(out_b)
+            attns.append(attn_dense)
+
+        return torch.stack(outs, 0), torch.stack(attns, 0)   # (B,N,dim) (B,H,N,N)
     
 # VAE
 class VAE(nn.Module):

@@ -12,9 +12,9 @@ from train.Evaluator import Evaluator
 from train.train_ours import train_ours_agent
 from agent.Ours_agent import MacLight
 from tqdm import trange
-from net.net import PolicyNet, ValueNet, GATBlock
+from net.net import PolicyNet, ValueNet, DynamicGNN
 from env.wrap.random_block import BlockStreet
-from util.tools import MARLWrap,build_adj_matrix,adj_to_edge_index
+from util.tools import MARLWrap,adj_to_edge_index,build_two_hop_adj_matrix
 import warnings
 warnings.filterwarnings('ignore')
 from transformers import get_cosine_schedule_with_warmup
@@ -56,7 +56,7 @@ if __name__ == '__main__':
         else:
             args.block_num = None
 
-        args.model_name = 'Ours_GATv2'
+        args.model_name = 'Ours_dynamic_adj_GATv2'
         args.task = args.task + '_' + args.level
     
 
@@ -74,9 +74,18 @@ if __name__ == '__main__':
     system_type = sys.platform
 
     # ---------------------------- networks ------------------------------
-    adj_mask  = build_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
-    edge_index = adj_to_edge_index(adj_mask).to(device)
-    gat = GATBlock(d_in=33, d_out=global_emb_dim, heads=4, edge_index= edge_index, dropout=0.1).to(device)
+    # 1. fixed ≤2-hop skeleton  
+    adj2  = build_two_hop_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
+    edge_candidates = adj_to_edge_index(adj2).to(device)
+    # 2. dynamic GAT with learnable adjacency
+    gat = DynamicGNN(obs_dim= 33,
+                 hid_dim= 64,
+                 out_dim= 32,
+                 heads= 4,
+                 edge_candidates= edge_candidates,
+                 k= 4,
+                 dropout= 0.1,
+                 device= device).to(device)
     
     base_lr=1e-3
     warmup_frac  = 0.1                         # 10 % warm-up

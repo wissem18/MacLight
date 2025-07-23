@@ -5,7 +5,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
-from net.net import GATBlock
+from net.net import DynamicGNN
 
 # declare the device
 global device
@@ -15,7 +15,7 @@ def train_ours_agent(
     env: object,
     agents: object,
     agent_name: list,
-    gat: GATBlock,
+    gat: DynamicGNN,
     gat_optimizer,
     gat_scheduler,
     writer: int,
@@ -53,6 +53,7 @@ def train_ours_agent(
 
         # * ---- execute simulation ----
         state, done, truncated = env.reset(seed=seed)[0], False, False
+        gat.reset_memory()
         while not done | truncated:
             action = {}
             for agt_name in agent_name:
