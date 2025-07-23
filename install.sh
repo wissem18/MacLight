@@ -6,4 +6,4 @@ pip install gymnasium
 pip install pettingzoo
 pip install torch_geometric
 pip install transformers
-pip install torch-scatter
+pip install scipy

@@ -3,7 +3,30 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv as GATConv
-from torch_scatter import topk as scatter_topk
+
+# Utility function
+def per_row_topk(scores: torch.Tensor, rows: torch.Tensor, k: int):
+    """
+    For each unique value in `rows`, keep top-k entries in `scores`.
+    Returns indices into the original arrays.
+    Args:
+        scores: (E,) - value to rank for each edge
+        rows: (E,)   - which group each edge belongs to (e.g. source node)
+        k: int       - max number of edges to keep per group
+    Returns:
+        keep_idx: (E_kept,) - indices into original arrays (flat)
+    """
+    keep_mask = torch.zeros_like(scores, dtype=torch.bool)
+    unique_rows = torch.unique(rows)
+    for row in unique_rows:
+        idx = (rows == row).nonzero(as_tuple=True)[0]
+        if idx.numel() > 0:
+            topk = torch.topk(scores[idx], min(k, idx.numel()), largest=True, sorted=False)
+            keep_mask[idx[topk.indices]] = True
+    return keep_mask.nonzero(as_tuple=True)[0]
+
+
+
 
 class PolicyNet(torch.nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
@@ -110,7 +133,7 @@ class EdgeScorer(nn.Module):
         feat   = torch.cat([h[self.src], h[self.dst]], dim=1)   # (E,2h)
         score  = torch.sigmoid(self.mlp(feat).squeeze())        # (E,)
 
-        keep   = scatter_topk(score, self.k, index=self.src)    # indices kept
+        keep   = per_row_topk(score, self.src, index=self.k)    # indices kept
         edge_i = torch.stack([self.src[keep], self.dst[keep]], 0)
         return edge_i, score[keep]
         
