@@ -21,7 +21,7 @@ class Evaluator:
 
     def evaluate_and_save(self, writer, return_list, waiting_list, queue_list, speed_list, time_list,
                           seed_list, ckpt_path, episode, agent, seed,
-                          actor_loss_list=False, critic_loss_list=False, **kwargs):
+                          actor_loss_list=False, critic_loss_list=False,pred_loss_list=False, **kwargs):
         vae_loss_list = kwargs.get('vae_loss_list', None)
 
         # * ---- 整理信息 ----
@@ -46,8 +46,9 @@ class Evaluator:
         return_save['waiting_list'] = waiting_list
         return_save['queue_list'] = queue_list
         return_save['speed_list'] = speed_list
-        return_save['Actor loss'] = sum(actor_loss_list) / len(actor_loss_list) if actor_loss_list else None
-        return_save['Critic loss'] = sum(critic_loss_list) / len(critic_loss_list) if critic_loss_list else None
+        return_save['Actor loss']  = actor_loss_list  if actor_loss_list  else None   
+        return_save['Critic loss'] = critic_loss_list if critic_loss_list else None  
+        return_save['Pred loss']   = pred_loss_list   if pred_loss_list   else None  
         return_save['VAE loss'] = vae_loss_list if actor_loss_list else None
         return_save["Log time"] = (time.time()- self.time_flag) / 60
         if writer > 0:
