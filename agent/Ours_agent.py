@@ -3,7 +3,7 @@ import torch, numpy as np, torch.nn.functional as F
 class MacLight:
     def __init__(self, policy_net, critic_net,
                  actor_lr=1e-4, critic_lr=5e-3,
-                 gamma=0.9, lmbda=0.9, epochs=20, eps=0.2,
+                 gamma=0.9, lmbda=0.9,pred_coef=0.3, epochs=20, eps=0.2,
                  device='cpu'):
 
         self.actor   = policy_net.to(device)
@@ -11,7 +11,7 @@ class MacLight:
         self.actor_optimizer  = torch.optim.Adam(self.actor.parameters(),  lr=actor_lr)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
 
-        self.gamma, self.lmbda = gamma, lmbda
+        self.gamma, self.lmbda, self.pred_coef = gamma, lmbda, pred_coef
         self.epochs, self.eps  = epochs, eps
         self.device            = device
 
@@ -28,7 +28,7 @@ class MacLight:
     # ───────────────────────────────────────────────────────────────
     # update  —  **new arg accumulate_attn_grad**
     # ───────────────────────────────────────────────────────────────
-    def update(self, transition_dict, agent_name,attention, accumulate_attn_grad=False):
+    def update(self, transition_dict, agent_name,attention,predictor, accumulate_attn_grad=False):
         """One agent’s PPO update.  
         """
         # ------------------------------------------------------------------
@@ -85,17 +85,21 @@ class MacLight:
                                       torch.clamp(ratio,1-self.eps,1+self.eps)*adv)).mean()
             critic_loss = F.mse_loss(v_now, td_tgt)
 
+            # ------------- auxiliary predictor loss -------------
+            o_pred    = predictor(g,states)                     # (T, obs_dim)
+            pred_loss  = F.mse_loss(o_pred, next_states)  # predict next local obs
+
             # backward
             self.actor_optimizer.zero_grad(set_to_none=True)
             self.critic_optimizer.zero_grad(set_to_none=True)
 
-            (actor_loss + critic_loss).backward()
+            (actor_loss + critic_loss +self.pred_coef*pred_loss).backward()
 
             self.actor_optimizer.step()
             self.critic_optimizer.step()
             # >>>> Attention step happens **outside** when accumulate=True
 
-        return actor_loss.item(), critic_loss.item()
+        return actor_loss.item(), critic_loss.item(),pred_loss.item()
 
     # ---- helpers --------------------------------------------------------
     def get_attn_lr_history(self):       return self.lr_history

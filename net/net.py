@@ -1,3 +1,4 @@
+from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -96,6 +97,36 @@ class GATBlock(nn.Module):
 
         return torch.stack(out, 0), torch.stack(attn, 0)   # (B,N,d) , (B,H,N,N)
     
+class NextObsPredictor(nn.Module):
+    """Auxiliary head that predicts the node's next raw observation.
+
+    * If `concat_obs` is False (default) the predictor sees only `h_t`.
+    * If `concat_obs` is True, it sees `[h_t ∥ o_t]`.
+    """
+
+    def __init__(
+        self,
+        h_dim: int,
+        obs_dim: int,
+        hidden_dim: Optional[int] = None,
+        concat_obs: bool = False,
+    ):
+        super().__init__()
+        self.concat_obs = concat_obs
+        in_dim = h_dim + (obs_dim if concat_obs else 0)
+        hidden_dim = hidden_dim or 4 * h_dim
+        self.mlp = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, obs_dim),
+        )
+
+    def forward(self, h: torch.Tensor, o: Optional[torch.Tensor] = None) -> torch.Tensor:  # (B*N, h_dim) / (B*N, obs_dim)
+        if self.concat_obs:
+            if o is None:
+                raise ValueError("Observation tensor must be provided when concat_obs=True")
+            h = torch.cat([h, o], dim=-1)
+        return self.mlp(h)    
     
 # VAE
 class VAE(nn.Module):

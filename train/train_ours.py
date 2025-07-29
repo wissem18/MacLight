@@ -5,7 +5,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
-from net.net import GATBlock
+from net.net import GATBlock,NextObsPredictor
 
 # declare the device
 global device
@@ -16,6 +16,7 @@ def train_ours_agent(
     agents: object,
     agent_name: list,
     gat: GATBlock,
+    predictor:NextObsPredictor,
     gat_optimizer,
     gat_scheduler,
     writer: int,
@@ -28,6 +29,7 @@ def train_ours_agent(
     
     actor_loss_list = []
     critic_loss_list = []
+    pred_loss_list = [] 
     attn_weights_list = []
     return_list = []
     waiting_list = []
@@ -77,11 +79,12 @@ def train_ours_agent(
         # * ---- update agent and attention--- 
         gat_optimizer.zero_grad()          # clear shared grads
         for agt_name in agent_name:
-            actor_loss, critic_loss = agents[agt_name].update(
-                    transition_dict, agt_name,gat,
+            actor_loss, critic_loss,pred_loss = agents[agt_name].update(
+                    transition_dict, agt_name,gat,predictor,
                     accumulate_attn_grad=True)   # ← grads accumulate
             actor_loss_list.append(actor_loss)
             critic_loss_list.append(critic_loss)
+            pred_loss_list.append(pred_loss)
 
         gat_optimizer.step()               # single shared step
         gat_scheduler.step()
