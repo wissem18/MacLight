@@ -56,7 +56,7 @@ if __name__ == '__main__':
         else:
             args.block_num = None
 
-        args.model_name = 'Ours_GATv2'
+        args.model_name = 'Ours_GATv2_self_attention'
         args.task = args.task + '_' + args.level
     
 
@@ -94,8 +94,7 @@ if __name__ == '__main__':
 
     marl = MARLWrap('I', MacLight, alg_args,
                     PolicyNet, ValueNet,
-                    state_dim, hidden_dim, action_dim,
-                    latent_dim=global_emb_dim)        # critic will see +32 dims
+                    state_dim, hidden_dim, action_dim)
 
 
     # * ------------------------ Train ----------------------------

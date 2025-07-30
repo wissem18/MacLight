@@ -87,7 +87,7 @@ def MARLWrap(type, alg, alg_args, policy, value, state_dim, hidden_dim, action_d
         assert isinstance(state_dim, int), "state dim should be a integer"
         latent_dim = kwargs.get('latent_dim', 0)
         policy_net = policy(state_dim, hidden_dim, action_dim)
-        critic_net = value(state_dim, hidden_dim, latent_dim)
+        critic_net = value(32, hidden_dim, latent_dim)
         agents = {}
         for name in alg_args['agent_name']:
             agents[name] = alg(policy_net, critic_net, alg_args['actor_lr'],

@@ -71,8 +71,8 @@ class MacLight:
 
 
             # critic targets / deltas
-            v_now  = self.critic(states, g)
-            v_next = self.critic(next_states, g_next).detach()
+            v_now  = self.critic(g)
+            v_next = self.critic(g_next).detach()
             td_tgt = rewards + self.gamma * v_next * (1 - dones)
             td_del = td_tgt - v_now
             adv    = self.compute_advantage(self.gamma, self.lmbda,

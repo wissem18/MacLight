@@ -67,7 +67,7 @@ class GATBlock(nn.Module):
             out_channels=d_out // heads,
             heads=heads,
             dropout=dropout,
-            add_self_loops=False
+            add_self_loops=True
         )
 
     def forward(self, H):               # H: (B, N, d_in)
