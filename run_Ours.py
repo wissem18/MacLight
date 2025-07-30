@@ -44,7 +44,7 @@ if __name__ == '__main__':
     agent_name = env.possible_agents
     global_emb_dim = 32
     state_dim = [env.observation_space(i).shape[0] for i in agent_name]
-    hidden_dim = [(env.observation_space(i).shape[0]) * 2 for i in agent_name]
+    hidden_dim = [(env.observation_space(i).shape[0]+global_emb_dim) * 2 for i in agent_name]
     action_dim = [env.action_space(i).n for i in agent_name]
     if len(set(state_dim)) == 1:
         state_dim = state_dim[0]
