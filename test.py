@@ -82,11 +82,17 @@ def evaluate(args):
         t0=time.time()
         state, done, truncated = env.reset(seed=args.seed)[0], False, False
         cum_return = 0.0
+        for ag in names:
+            agents[ag].last_action[ag] = 0
+            agents[ag].last_reward[ag] = 0.0
         while not done and not truncated:
-            action = {n: agents[n].take_action(state[n]) for n in names}
+            action = {n: agents[n].take_action(state[n],n) for n in names}
             state, reward, done, truncated, info = env.step(action)
             cum_return += np.mean(list(reward.values()))
             done = all(done.values()); truncated = all(truncated.values())
+            for ag in names:
+                agents[ag].last_action[ag] = action[ag]
+                agents[ag].last_reward[ag] = reward[ag]
         infer_time = time.time() - t0  
         root = names[0]
         rows.append(dict(Episode=epi,
