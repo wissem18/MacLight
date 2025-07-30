@@ -54,9 +54,9 @@ def evaluate(args):
     env = make_env(args.level, args.seconds, bool(args.gui))
 
     names       = env.possible_agents
-    state_dim   = env.observation_space(names[0]).shape[0]
+    state_dim   = env.observation_space(names[0]).shape[0]+9
     action_dim  = env.action_space(names[0]).n
-    hidden_dim  = state_dim * 2
+    hidden_dim  = (state_dim+32) * 2
 
     if args.task == 'block':
         env = BlockStreet(env, args.block_num, args.seconds)
