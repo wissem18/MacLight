@@ -56,7 +56,7 @@ if __name__ == '__main__':
         else:
             args.block_num = None
 
-        args.model_name = 'Ours_GATv2'
+        args.model_name = 'Ours_GATv2_temporal_encoder'
         args.task = args.task + '_' + args.level
     
     # Transformer settings  ---------------------------------- #
