@@ -94,7 +94,7 @@ if __name__ == '__main__':
 
     marl = MARLWrap('I', MacLight, alg_args,
                     PolicyNet, ValueNet,
-                    state_dim, hidden_dim, action_dim)
+                    state_dim, hidden_dim, action_dim, latent_dim=global_emb_dim)
 
 
     # * ------------------------ Train ----------------------------
