@@ -3,7 +3,7 @@ import torch, numpy as np, torch.nn.functional as F
 class MacLight:
     def __init__(self, policy_net, critic_net,
                  actor_lr=1e-4, critic_lr=5e-3,
-                 gamma=0.9, lmbda=0.9, epochs=20, eps=0.2,
+                 gamma=0.9, lmbda=0.9,pred_coef=0.01, epochs=20, eps=0.2,
                  device='cpu'):
 
         self.actor   = policy_net.to(device)
@@ -11,7 +11,7 @@ class MacLight:
         self.actor_optimizer  = torch.optim.Adam(self.actor.parameters(),  lr=actor_lr)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
 
-        self.gamma, self.lmbda = gamma, lmbda
+        self.gamma, self.lmbda, self.pred_coef = gamma, lmbda, pred_coef
         self.epochs, self.eps  = epochs, eps
         self.device            = device
 
@@ -25,11 +25,9 @@ class MacLight:
         action = torch.distributions.Categorical(self.actor(state)).sample()
         return action.item()
 
-    # ───────────────────────────────────────────────────────────────
-    # update  —  **new arg accumulate_attn_grad**
-    # ───────────────────────────────────────────────────────────────
-    def update(self, transition_dict, agent_name,attention, accumulate_attn_grad=False):
-        """One agent’s PPO update.  
+    
+    def update(self, transition_dict, agent_name,attention,temp_enc, predictor, accumulate_attn_grad=False):
+        """One agent’s PPO update with temporal encoder + dynamic predictor.  
         """
         # ------------------------------------------------------------------
         # 1. pull this agent’s local trajectory tensors
@@ -46,10 +44,11 @@ class MacLight:
         # ------------------------------------------------------------------
         agt_order = list(transition_dict['states'].keys())
         idx       = agt_order.index(agent_name)
-        stack = lambda key: torch.stack([ to_t(transition_dict[key][a], torch.float32)
-                                          for a in agt_order ], dim=1)
+        stack = lambda key, dtype=torch.float32: torch.stack([to_t(transition_dict[key][a], dtype) for a in agt_order], dim=1)
         whole_state       = stack('states')
         whole_next_state  = stack('next_states')
+        whole_action      = stack('actions',dtype=torch.int64)
+        whole_reward      = stack('rewards')
 
         old_log_probs = torch.log(self.actor(states).gather(1, actions)).detach()
 
@@ -58,44 +57,56 @@ class MacLight:
         # ------------------------------------------------------------------
         for epoch in range(self.epochs):
 
-            g_all , A   = attention(whole_state)         # (T,N,d)
-            g_next_all,_= attention(whole_next_state)
+            # 1 – spatial embeddings via GAT
+            h_all, A = attention(whole_state)                                    # (T,N,d)
 
-            g      = g_all      [:, idx, :]                   # (T,d)
-            g_next = g_next_all [:, idx, :]
+            # stack the last K GAT outputs for each timestep -> Transformer
+            K = temp_enc.K
+            pad  = torch.zeros(K - 1, *h_all.shape[1:], device=self.device)
+            cat  = torch.cat([pad, h_all], dim=0)                           # (T+K-1,N,d)
+            hist = torch.stack([cat[t:t + K] for t in range(h_all.size(0))], 0)
+            hist = hist.permute(0, 2, 1, 3)                                 # (T,N,K,d)
+            z_all = temp_enc(hist)                                          # (T,N,d)
 
-            if epoch == self.epochs-1:                                    # keep last A
-                self.full_A = A.detach().cpu().to(torch.float16)  # (T,H,N,N) 
-            # Debug 
-            
+            z_t     = z_all[:, idx, :]                                      # (T,d)  this node
+            z_next  = torch.cat([z_t[1:], z_t[-1:].clone()], dim=0)
 
+            if epoch == self.epochs - 1:
+                self.full_A = A.detach().cpu().to(torch.float16)
 
-            # critic targets / deltas
-            v_now  = self.critic(states, g)
-            v_next = self.critic(next_states, g_next).detach()
+            # 2 – critic targets
+            v_now  = self.critic(states, z_t)
+            v_next = self.critic(next_states, z_next).detach()
             td_tgt = rewards + self.gamma * v_next * (1 - dones)
             td_del = td_tgt - v_now
-            adv    = self.compute_advantage(self.gamma, self.lmbda,
-                                            td_del.detach()).to(self.device)
+            adv = self.compute_advantage(self.gamma, self.lmbda, td_del.detach()).to(self.device)
 
-            # losses
+            # 3 – actor & critic losses
             logp   = torch.log(self.actor(states).gather(1, actions))
             ratio  = torch.exp(logp - old_log_probs)
-            actor_loss  = -(torch.min(ratio*adv,
-                                      torch.clamp(ratio,1-self.eps,1+self.eps)*adv)).mean()
+            actor_loss  = -(torch.min(ratio * adv,
+                                       torch.clamp(ratio, 1 - self.eps, 1 + self.eps) * adv)).mean()
             critic_loss = F.mse_loss(v_now, td_tgt)
 
-            # backward
+            # 4 – dynamic-prediction loss  ẑ_t ≈ z_t
+            a_prev = F.one_hot(whole_action[:-1], num_classes=predictor.action_dim).float()    # (T-1,N,|A|)
+            r_prev = whole_reward[:-1].unsqueeze(-1)                                     # (T-1,N,1)
+            z_prev = z_all[:-1].reshape(-1, z_t.size(-1))                             # ((T-1)*N,d)
+            z_tgt  = z_all[1:].reshape(-1, z_t.size(-1))
+            z_hat  = predictor(z_prev,
+                               a_prev.reshape(-1, predictor.action_dim),
+                               r_prev.reshape(-1, 1))
+            pred_loss = F.mse_loss(z_hat, z_tgt.detach())
+
+            # 5 – back-prop
             self.actor_optimizer.zero_grad(set_to_none=True)
             self.critic_optimizer.zero_grad(set_to_none=True)
-
-            (actor_loss + critic_loss).backward()
-
+            total_loss = actor_loss + critic_loss + self.pred_coef * pred_loss
+            total_loss.backward()
             self.actor_optimizer.step()
             self.critic_optimizer.step()
-            # >>>> Attention step happens **outside** when accumulate=True
 
-        return actor_loss.item(), critic_loss.item()
+        return actor_loss.item(), critic_loss.item(), pred_loss.item()
 
     # ---- helpers --------------------------------------------------------
     def get_attn_lr_history(self):       return self.lr_history

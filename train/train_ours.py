@@ -5,7 +5,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
-from net.net import GATBlock
+from net.net import GATBlock, TemporalEncoder, DynamicPredictor
 
 # declare the device
 global device
@@ -16,6 +16,8 @@ def train_ours_agent(
     agents: object,
     agent_name: list,
     gat: GATBlock,
+    temp_enc: TemporalEncoder,
+    predictor: DynamicPredictor,
     gat_optimizer,
     gat_scheduler,
     writer: int,
@@ -28,6 +30,7 @@ def train_ours_agent(
     
     actor_loss_list = []
     critic_loss_list = []
+    pred_loss_list = []
     attn_weights_list = []
     return_list = []
     waiting_list = []
@@ -50,7 +53,7 @@ def train_ours_agent(
                            "dones": {agt_name: 0 for agt_name in agent_name},
                            "global_emb": []}
         episode_return = 0
-
+        ep_actor, ep_critic, ep_pred = [], [], []
         # * ---- execute simulation ----
         state, done, truncated = env.reset(seed=seed)[0], False, False
         while not done | truncated:
@@ -77,16 +80,21 @@ def train_ours_agent(
         # * ---- update agent and attention--- 
         gat_optimizer.zero_grad()          # clear shared grads
         for agt_name in agent_name:
-            actor_loss, critic_loss = agents[agt_name].update(
-                    transition_dict, agt_name,gat,
+            actor_loss, critic_loss,pred_loss = agents[agt_name].update(
+                    transition_dict, agt_name,gat, temp_enc, predictor,
                     accumulate_attn_grad=True)   # ← grads accumulate
-            actor_loss_list.append(actor_loss)
-            critic_loss_list.append(critic_loss)
+            ep_actor.append(actor_loss)
+            ep_critic.append(critic_loss)
+            ep_pred.append(pred_loss)
 
         gat_optimizer.step()               # single shared step
         gat_scheduler.step()
         
-    
+        # store per-episode means
+        actor_loss_list.append(float(np.mean(ep_actor)))
+        critic_loss_list.append(float(np.mean(ep_critic)))
+        pred_loss_list.append(float(np.mean(ep_pred)))
+
         attn_weights_list.append(
             agents[agent_name[0]].get_full_attention()
         )
@@ -107,7 +115,7 @@ def train_ours_agent(
         # save log to file and report train status
         evaluator.evaluate_and_save(writer, return_list, waiting_list, queue_list, speed_list,
                                     time_list, seed_list, ckpt_path, episode, agents, seed,
-                                    actor_loss_list, critic_loss_list, vae_loss_list=None, vae=None)
+                                    actor_loss_list, critic_loss_list,pred_loss_list, vae_loss_list=None, vae=None)
          
     #save attention weights for analysis
     if attn_weights_list: 

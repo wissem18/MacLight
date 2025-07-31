@@ -92,7 +92,7 @@ def MARLWrap(type, alg, alg_args, policy, value, state_dim, hidden_dim, action_d
         for name in alg_args['agent_name']:
             agents[name] = alg(policy_net, critic_net, alg_args['actor_lr'],
                               alg_args['critic_lr'], alg_args['gamma'],
-                              alg_args['lmbda'], alg_args['epochs'],
+                              alg_args['lmbda'],alg_args['pred_coef'], alg_args['epochs'],
                               alg_args['eps'], alg_args['device'])
         return agents
 

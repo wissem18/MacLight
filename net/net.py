@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv as GATConv
 
-
 class PolicyNet(torch.nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
         super().__init__()
@@ -95,6 +94,67 @@ class GATBlock(nn.Module):
             attn.append(A_dense)             
 
         return torch.stack(out, 0), torch.stack(attn, 0)   # (B,N,d) , (B,H,N,N)
+    
+# ─────────────────────────────────────────────────────────────
+#  Temporal Encoder  (Upper Transformer from X-Light)
+# ─────────────────────────────────────────────────────────────
+class TemporalEncoder(nn.Module):
+    """
+    Attend over the last K GAT outputs per node.
+      • input : (B, N, K, d)   — stack from a deque
+      • output: (B, N, d)      — last-token after attention
+    """
+    def __init__(self, d_model: int = 32, K: int = 8,
+                 n_heads: int = 4, n_layers: int = 2, dropout: float = 0.1):
+        super().__init__()
+        self.K = K
+        self.pos = nn.Parameter(torch.zeros(K, d_model))     # learnable PE
+        enc_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=n_heads,
+            dim_feedforward=4 * d_model, dropout=dropout,
+            batch_first=True, activation="relu")
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=n_layers)
+
+    def forward(self, hist: torch.Tensor) -> torch.Tensor:
+        # hist : (B, N, K, d)
+        B, N, K, d = hist.shape
+        x = (hist + self.pos).contiguous().view(B * N, K, d)
+        z = self.encoder(x)[:, -1]                            # last token
+        return z.view(B, N, d)
+
+
+# ─────────────────────────────────────────────────────────────
+#  Dynamic Predictor  (z_{t-1}, a_{t-1}, r_{t-1} → ẑ_t)
+# ─────────────────────────────────────────────────────────────
+class DynamicPredictor(nn.Module):
+    """
+    Predict next transformer output  z_t  from
+    [ z_{t-1} ‖ onehot(a_{t-1}) ‖ r_{t-1} ].
+      • input dims : d_model + |A| + 1
+      • output     : d_model
+    """
+    def __init__(self, d_model: int, action_dim: int):
+        super().__init__()
+        hidden = 4 * d_model
+        self.action_dim=action_dim
+        self.mlp = nn.Sequential(
+            nn.Linear(d_model + action_dim + 1, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, d_model),
+        )
+
+    def forward(self, z_prev: torch.Tensor,
+                a_prev_oh: torch.Tensor,
+                r_prev: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        z_prev   : (B*N, d_model)
+        a_prev_oh: (B*N, |A|)
+        r_prev   : (B*N, 1)
+        """
+        inp = torch.cat([z_prev, a_prev_oh, r_prev], dim=-1)
+        return self.mlp(inp)
     
     
 # VAE
