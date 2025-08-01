@@ -56,7 +56,7 @@ def evaluate(args):
     names       = env.possible_agents
     state_dim   = env.observation_space(names[0]).shape[0]
     action_dim  = env.action_space(names[0]).n
-    hidden_dim  = state_dim * 2
+    hidden_dim  = (state_dim+32) * 2
 
     if args.task == 'block':
         env = BlockStreet(env, args.block_num, args.seconds)
@@ -70,7 +70,7 @@ def evaluate(args):
         policies[agent] = policy
 
     alg_args = dict(actor_lr=0, critic_lr=0, gamma=0.99, lmbda=0.95,
-                    epochs=1, eps=0.2, device=device, agent_name=names)
+                    epochs=1, eps=0.2, pred_coef=0.01, device=device, agent_name=names)
     agents = MARLWrap('I', MacLight, alg_args, PolicyNet, ValueNet, state_dim, hidden_dim, action_dim)
 
     for n in names:
