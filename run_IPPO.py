@@ -68,7 +68,7 @@ if __name__ == '__main__':
             env = BlockStreet(env, args.block_num, args.seconds)
         else:
             args.block_num = None
-        args.task = args.task + '_' + args.level
+        args.task = args.network + '_' + args.task + '_' + args.level
 
     # PPO
     alg_args = {}
