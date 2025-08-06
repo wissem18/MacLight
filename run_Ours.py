@@ -72,7 +72,7 @@ if __name__ == '__main__':
             args.block_num = None
 
         args.model_name = 'Ours_GATv2'
-        args.task = args.task + '_' + args.level
+        args.task = args.network + '_' + args.task + '_' + args.level
     
 
     # PPO
