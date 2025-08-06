@@ -42,8 +42,8 @@ if __name__ == '__main__':
     },
     # Hangzhou real-world dataset (4-phase)
     "hangzhou": {
-        "net":  "env\map\hangzhou_4x4_gudang_18041610_1h.net.xml",
-        "rou":  "env\map\hangzhou_4x4_gudang_18041610_1h.rou.xml"
+        "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
+        "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
     }
 }
     net_file=NETWORK_TABLE[args.network]["net"]
@@ -72,7 +72,7 @@ if __name__ == '__main__':
             args.block_num = None
         args.model_name = 'Ours'
         latent_dim = 10
-        args.task = args.task + '_' + args.level
+        args.task = args.network + '_' + args.task + '_' + args.level
 
     # PPO
     alg_args = {}
