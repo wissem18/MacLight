@@ -90,10 +90,10 @@ if __name__ == '__main__':
 
     # ---------------------------- networks ------------------------------
     # 1. fixed ≤2-hop skeleton  
-    adj2  = build_two_hop_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
+    adj2  = build_two_hop_adj_matrix(net_file=net_file, agent_ids=agent_name) 
     edge_candidates = adj_to_edge_index(adj2).to(device)
     # 2. dynamic GAT with learnable adjacency
-    gat = DynamicGNN(obs_dim= 33,
+    gat = DynamicGNN(obs_dim= state_dim,
                  hid_dim= 64,
                  out_dim= 32,
                  heads= 4,
