@@ -1,5 +1,5 @@
 import os
-os.environ['LIBSUMO_AS_TRACI'] = '1'
+# os.environ['LIBSUMO_AS_TRACI'] = '1'
 import argparse
 import torch
 import gymnasium as gym
@@ -13,10 +13,10 @@ from agent.Ours_agent import MacLight
 from tqdm import trange
 from net.net import PolicyNet, ValueNet, VAE
 from env.wrap.random_block import BlockStreet
+from env.wrap.weather_perturbation import WeatherPerturb
 from util.tools import MARLWrap
 import warnings
 warnings.filterwarnings('ignore')
-
 
 # * ---------------------- Parameters -------------------------
 if __name__ == '__main__':
@@ -26,6 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--task', default="block", type=str, help='task: regular / block')
     parser.add_argument('-b', '--block_num', default=8, type=int, help='Number of blocked roads')
     parser.add_argument('-l', '--level', default='normal', type=str, help='Difficulty of the task: normal/hard')  # hard for Peak in paper
+    parser.add_argument('--weather', default=0,type=int, help='Whether or not to add the weather perturbation to scenario')
     parser.add_argument('-n', '--network', default='ff', type=str,help='Scenario network key: ff / hangzhou')    
     parser.add_argument('-w', '--writer', default=0, type=int, help='Log mode, 0: no, 1: local')
     parser.add_argument('--seconds', default=3600, type=int, help='Simulation seconds')
@@ -46,6 +47,7 @@ if __name__ == '__main__':
         "rou":  "env\map\hangzhou_4x4_gudang_18041610_1h.rou.xml"
     }
 }
+    
     net_file=NETWORK_TABLE[args.network]["net"]
     route_file=NETWORK_TABLE[args.network]["rou"]    
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -70,6 +72,9 @@ if __name__ == '__main__':
             env = BlockStreet(env, args.block_num, args.seconds)
         else:
             args.block_num = None
+        
+        if args.weather:
+            env = WeatherPerturb(env,seconds=args.seconds, start=0, end=-1)
         args.model_name = 'Ours'
         latent_dim = 10
         args.task = args.task + '_' + args.level
@@ -100,3 +105,4 @@ if __name__ == '__main__':
                           state_dim, hidden_dim, action_dim, latent_dim=latent_dim)
         return_list, train_time = train_ours_agent(env, magent, agent_name, vae, args.writer,
                                                    args.episodes, seed, CKP_PATH, evaluator,)
+    

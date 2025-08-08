@@ -32,6 +32,7 @@ def train_ours_agent(
     best_score = -1e10
     actor_best_weight = {}
     critic_best_weight = {}
+    step_log = {}
     optimizer = optim.Adam(vae.parameters(), lr=1e-3) if vae else None
 
     for episode in range(total_episodes):
@@ -46,11 +47,23 @@ def train_ours_agent(
 
         # * ---- execute simulation ----
         state, done, truncated = env.reset(seed=seed)[0], False, False
+        # per-step containers
+        step_log[episode] = {"t": [], "ret": [], "wait": [], "queue": [], "speed": []}
+        sim_time = 0
         while not done | truncated:
             action = {}
             for agt_name in agent_name:
                 action[agt_name] = agents[agt_name].take_action(state[agt_name])
             next_state, reward, done, truncated, info = env.step(action)
+
+             # --- record per-step metrics -----------------------------
+            step_log[episode]["t"].append(sim_time)
+            step_log[episode]["ret"].append(np.mean(list(reward.values())))
+            step_log[episode]["wait"].append(info[agent_name[0]]["system_total_waiting_time"])
+            step_log[episode]["queue"].append(info[agent_name[0]]["system_total_stopped"])
+            step_log[episode]["speed"].append(info[agent_name[0]]["system_mean_speed"])
+            sim_time += 5
+
             transition_dict = update_transition(agent_name, epi_training, transition_dict, state,
                                                     done, action, next_state, reward)
             epi_training = True
@@ -66,6 +79,8 @@ def train_ours_agent(
         speed_list.append(info[agent_name[0]]["system_mean_speed"])
         time_list.append(time.strftime('%m-%d %H:%M:%S', time.localtime()))
         seed_list.append(seed)
+
+        
 
         # *  ---- train_vae ----
         if vae:
@@ -108,7 +123,7 @@ def train_ours_agent(
         evaluator.evaluate_and_save(writer, return_list, waiting_list, queue_list, speed_list,
                                     time_list, seed_list, ckpt_path, episode, agents, seed,
                                     actor_loss_list, critic_loss_list, vae_loss_list=vae_loss_list, vae=vae)
-
+    np.savez_compressed(f"{ckpt_path}/{seed}_step_metrics.npz",step_log=step_log)
     env.close()
     total_time = time.time() - start_time
     print(f"\033[32m[ Total time ]\033[0m {(total_time / 60):.2f} min")
