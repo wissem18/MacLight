@@ -56,11 +56,23 @@ def train_ours_agent(
         ep_actor, ep_critic, ep_pred = [], [], []
         # * ---- execute simulation ----
         state, done, truncated = env.reset(seed=seed)[0], False, False
+        # per-step containers
+        step_log[episode] = {"t": [], "ret": [], "wait": [], "queue": [], "speed": []}
+        sim_time = 0
         while not done | truncated:
             action = {}
             for agt_name in agent_name:
                 action[agt_name] = agents[agt_name].take_action(state[agt_name])
             next_state, reward, done, truncated, info = env.step(action)
+
+             # --- record per-step metrics -----------------------------
+            step_log[episode]["t"].append(sim_time)
+            step_log[episode]["ret"].append(np.mean(list(reward.values())))
+            step_log[episode]["wait"].append(info[agent_name[0]]["system_total_waiting_time"])
+            step_log[episode]["queue"].append(info[agent_name[0]]["system_total_stopped"])
+            step_log[episode]["speed"].append(info[agent_name[0]]["system_mean_speed"])
+            sim_time += 5
+
             transition_dict = update_transition(agent_name, epi_training, transition_dict, state,
                                                     done, action, next_state, reward)
             epi_training = True

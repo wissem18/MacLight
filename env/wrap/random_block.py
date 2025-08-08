@@ -10,7 +10,7 @@ class BlockStreet:
         # blockable edges can be refer to light yellow parts in `./doc.map_indicator.pdf`
         self.block_num = block_num
         self.end_time = seconds
-        self.agent_name = env.possible_agents
+        self.possible_agents = env.possible_agents
 
         self.blockable_edges = ['B2C2', 'B3C3', 'C1C2', 'C2B2', 'C2C1',
                                 'C2C3', 'C2D2', 'C3B3', 'C3C2', 'C3C4',
@@ -48,7 +48,7 @@ class BlockStreet:
         self.time += 5
         next_state, reward, done, truncated, info = self.env.step(action)
         if self.time >= self.end_time:
-            done = {agt: True for agt in self.agent_name}
+            done = {agt: True for agt in self.possible_agents}
         return next_state, reward, done, truncated, info
 
     def close(self):
