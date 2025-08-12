@@ -1,43 +1,23 @@
 """
 Custom reward functions.
 """
-def mean_acc_wait(ts):
-    # total accumulated waiting time over incoming lanes (veh·s), scaled like the lib
-    total_acc = sum(ts.get_accumulated_waiting_time_per_lane()) / 100.0
-
-    # vehicles currently on incoming lanes
-    veh_count = sum(ts.sumo.lane.getLastStepVehicleNumber(l) for l in ts.lanes)
-
-    if veh_count == 0:
-        return 0.0
-    return total_acc / veh_count
-
 def trend_reward(ts):
-    """
-    trend reward based only on average waiting time.
+    # total accumulated waiting time snapshot (veh·s), same source as default
+    W_t = sum(ts.get_accumulated_waiting_time_per_lane()) / 100.0
 
-    Args
-    ----
-    ts : sumo_rl.environment.traffic_signal.TrafficSignal
-        The traffic-signal wrapper that called the reward.
+    # previous snapshot
+    W_prev = getattr(ts, "_W_prev", W_t)
 
-    Returns
-    -------
-    float
-        +ve if waiting-time dropped; -ve if it increased; 0 if unchanged.
-    """
-    # 1. current average waiting time
-    cur = mean_acc_wait(ts)
+    # increments (non-negative by definition)
+    a = getattr(ts, "_d_prev", W_prev - getattr(ts, "_W_prevprev", W_prev))  # ΔW_{t-1}
+    b = W_t - W_prev                                                         # ΔW_t
 
-    # 2. previous one stored as an ad-hoc attribute
-    prev = getattr(ts, "_prev_wait", cur)   # fallback=cur on first call
+    # reward in [-1,1]
+    denom = a + b
+    R = 0.0 if denom == 0.0 else (a - b) / denom
 
-    # 3. relative change  ——  eps=1e-6 avoids division by zero
-    eps = 1e-6
-    ratio = (cur + eps) / (prev + eps)
-
-    # 4. remember for next step
-    ts._prev_wait = cur
-
-    # 5. trend formula
-    return (1.0-ratio) / (1.0+ratio)
+    # stash for next call
+    ts._W_prevprev = W_prev
+    ts._W_prev = W_t
+    ts._d_prev = b
+    return R
