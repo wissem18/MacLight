@@ -36,3 +36,22 @@ def trend_reward(ts):
     ts._W_tm1 = W_t
     ts._d_tm1 = d_t
     return R
+
+def reward_neg_trend_increment(ts):
+    # snapshots & per-vehicle increments
+    W_t   = _acc_wait_total(ts)
+    W_tm1 = getattr(ts, "_W_tm1", W_t)
+
+    a = max(W_t - W_tm1, 0.0)                   # ΔW_t 
+    b = getattr(ts, "_d_tm1", b)                # ΔW_{t-1} 
+
+    ts._W_tm1 = W_t
+    ts._d_tm1 = a
+
+    # special cases
+    if b == 0.0:
+        return -1.0 if a > 0.0 else 0.0
+
+    q = a / (b + 1e-6)                          # ratio of increments
+    h = (1.0 - q) / (1.0 + q)                   # in [-1,1]
+    return min(0.0, h)                          # only penalize worsening
