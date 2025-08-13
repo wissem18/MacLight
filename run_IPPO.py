@@ -14,7 +14,7 @@ from tqdm import trange
 from net.net import PolicyNet, ValueNet
 from env.wrap.random_block import BlockStreet
 from util.tools import MARLWrap
-from util.reward import trend_reward
+from util.reward import reward_neg_only_rel_growth
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -53,7 +53,7 @@ if __name__ == '__main__':
                                route_file=route_file,
                                num_seconds=args.seconds,
                                use_gui=False,
-                               reward_fn=trend_reward,
+                               reward_fn=reward_neg_only_rel_growth,
                                sumo_warnings=False,
                                additional_sumo_cmd='--no-step-log')
     # Neural Networks
