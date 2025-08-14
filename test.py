@@ -9,6 +9,7 @@ import os, argparse, time, torch, numpy as np, pandas as pd, sumo_rl, sys
 from pathlib import Path
 from net.net import PolicyNet, ValueNet
 from agent.Ours_agent import MacLight
+from util.reward import simple_reward
 from util.tools import MARLWrap
 from env.wrap.random_block import BlockStreet
 
@@ -40,25 +41,40 @@ def load_agents_from_pt(agent_names, pt_path, device):
         policies[agent] = actor_state
     return policies
 
-def make_env(level, seconds, gui):
-    env = sumo_rl.parallel_env(net_file='env/map/ff.net.xml',
-                               route_file=f'env/map/ff_{level}.rou.xml',
+def make_env(level, seconds,network, gui):
+    NETWORK_TABLE = {
+    # synthetic network shipped with MacLight
+    "ff": {
+        "net":  "env/map/ff.net.xml",
+        "rou":  f'env/map/ff_{level}.rou.xml'
+    },
+    # Hangzhou real-world dataset (4-phase)
+    "hangzhou": {
+        "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
+        "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
+    }
+}
+    net_file=NETWORK_TABLE[network]['net']
+    rou_file=NETWORK_TABLE[network]['rou']
+    env = sumo_rl.parallel_env(net_file=net_file,
+                               route_file=rou_file,
                                num_seconds=seconds,
                                use_gui=gui,
+                            #    reward_fn=simple_reward,
                                sumo_warnings=False,
                                additional_sumo_cmd='--no-step-log')
     return env
 
 def evaluate(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    env = make_env(args.level, args.seconds, bool(args.gui))
+    env = make_env(args.level, args.seconds,args.network, bool(args.gui))
 
     names       = env.possible_agents
     state_dim   = env.observation_space(names[0]).shape[0]
     action_dim  = env.action_space(names[0]).n
     hidden_dim  = state_dim * 2
 
-    if args.task == 'block':
+    if args.task == 'block' and args.network == 'ff':
         env = BlockStreet(env, args.block_num, args.seconds)
 
     # Load all agents' actor policies
@@ -114,6 +130,7 @@ if __name__ == '__main__':
     p.add_argument('-t','--task', default='block', choices=['block','regular'])
     p.add_argument('-l','--level', default='normal', choices=['normal','hard'])
     p.add_argument('-b','--block_num', type=int, default=8)
+    p.add_argument('-n', '--network', default='ff', type=str, help='Scenario network key: ff/hangzhou')
     p.add_argument('-s','--seconds', type=int, default=3600)
     p.add_argument('-e','--episodes', type=int, default=1)
     p.add_argument('--seed', type=int, default=42)
