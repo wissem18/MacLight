@@ -14,7 +14,7 @@ from tqdm import trange
 from net.net import PolicyNet, ValueNet
 from env.wrap.random_block import BlockStreet
 from util.tools import MARLWrap
-from util.reward import simple_reward,composite_reward
+from util.reward import composite_exp_reward, exp_reward_1, simple_reward,composite_reward,exp_reward
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -53,7 +53,7 @@ if __name__ == '__main__':
                                route_file=route_file,
                                num_seconds=args.seconds,
                                use_gui=False,
-                               reward_fn=composite_reward,
+                               reward_fn=composite_exp_reward,
                                sumo_warnings=False,
                                additional_sumo_cmd='--no-step-log')
     # Neural Networks
@@ -70,7 +70,7 @@ if __name__ == '__main__':
             env = BlockStreet(env, args.block_num, args.seconds)
         else:
             args.block_num = None
-        args.task = args.network + '_' + args.task + '_' + args.level + '_trend_reward_3'
+        args.task = args.network + '_' + args.task + '_' + args.level + '_trend_reward_6'
 
     # PPO
     alg_args = {}

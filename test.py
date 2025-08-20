@@ -9,7 +9,7 @@ import os, argparse, time, torch, numpy as np, pandas as pd, sumo_rl, sys
 from pathlib import Path
 from net.net import PolicyNet, ValueNet
 from agent.Ours_agent import MacLight
-from util.reward import simple_reward
+from util.reward import exp_reward, exp_reward_1, simple_reward,composite_reward,composite_exp_reward
 from util.tools import MARLWrap
 from env.wrap.random_block import BlockStreet
 
@@ -60,7 +60,7 @@ def make_env(level, seconds,network, gui):
                                route_file=rou_file,
                                num_seconds=seconds,
                                use_gui=gui,
-                            #    reward_fn=simple_reward,
+                               reward_fn=composite_exp_reward,
                                sumo_warnings=False,
                                additional_sumo_cmd='--no-step-log')
     return env
