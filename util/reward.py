@@ -12,7 +12,6 @@ def simple_reward(ts) -> float:
     r= 1 if w_t <= w_tm1 else -1 
     # Stash for next step
     ts._w_tm1 = w_t
-    print(r)
     return r
 
 def composite_reward(ts)-> float:
@@ -32,7 +31,6 @@ def composite_reward(ts)-> float:
     ts._w_tm1 = w_t
     ts._s_tm1 = s_t
     ts._q_tm1 = q_t
-    print(r)
     return r
 
 def exp_reward(ts)->float:
@@ -44,5 +42,4 @@ def exp_reward(ts)->float:
     r=1-math.exp(d) if d<=0 else -1+math.exp(-d)
     # Stash for next step
     ts._w_tm1 = w_t
-    print(r)
     return r
