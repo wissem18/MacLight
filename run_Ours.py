@@ -1,4 +1,6 @@
 import os
+
+from util.reward import exp_reward
 os.environ['LIBSUMO_AS_TRACI'] = '1'
 os.environ["TORCH_DISTRIBUTED_DEBUG"]="DETAIL"
 import argparse
@@ -51,6 +53,7 @@ if __name__ == '__main__':
     env = sumo_rl.parallel_env(net_file=net_file,
                                route_file=route_file,
                                num_seconds=args.seconds,
+                               reward_fn=exp_reward,
                                use_gui=False,
                                sumo_warnings=False,
                                additional_sumo_cmd='--no-step-log')
@@ -72,7 +75,7 @@ if __name__ == '__main__':
             args.block_num = None
 
         args.model_name = 'Ours_dynamic_adj_GATv2'
-        args.task = args.network + '_' + args.task + '_' + args.level
+        args.task = args.network + '_' + args.task + '_' + args.level + '_exp_reward'
     
 
     # PPO
