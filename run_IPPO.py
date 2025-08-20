@@ -14,6 +14,7 @@ from tqdm import trange
 from net.net import PolicyNet, ValueNet
 from env.wrap.random_block import BlockStreet
 from util.tools import MARLWrap
+from util.reward import composite_exp_reward, exp_reward_1, simple_reward,composite_reward,exp_reward
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -37,6 +38,7 @@ if __name__ == '__main__':
                                route_file=f'env/map/ff_{args.level}.rou.xml',
                                num_seconds=args.seconds,
                                use_gui=False,
+                               reward_fn=composite_exp_reward,
                                sumo_warnings=False,
                                additional_sumo_cmd='--no-step-log')
     # Neural Networks
