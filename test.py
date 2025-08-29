@@ -79,34 +79,34 @@ def evaluate(args):
 
     rows = []
     for epi in range(1, args.episodes + 1):
-        t0=time.time()
-        state, done, truncated = env.reset(seed=args.seed)[0], False, False
-        cum_return = 0.0
-        while not done and not truncated:
-            action = {n: agents[n].take_action(state[n]) for n in names}
-            state, reward, done, truncated, info = env.step(action)
-            cum_return += np.mean(list(reward.values()))
-            done = all(done.values()); truncated = all(truncated.values())
-        infer_time = time.time() - t0  
-        root = names[0]
-        rows.append(dict(Episode=epi,
-                         Return=cum_return,
-                         Waiting=info[root]['system_total_waiting_time'],
-                         Queue=info[root]['system_total_stopped'],
-                         Speed=info[root]['system_mean_speed'],
-                         Time=time.strftime('%m-%d %H:%M:%S'),
-                         InferenceTime=infer_time,
-                         Seed=args.seed))
-        print(f"Episode {epi}:\nreturn: {cum_return:.2f}")
-        print(f"Total Waiting Time: {rows[-1]['Waiting']}")
-        print(f"Total Queue: {rows[-1]['Queue']}")
-        print(f"Average speed: {rows[-1]['Speed']}")
-        print(f"Inference Time: {rows[-1]['InferenceTime']}")
-    env.close()
-
-    df = pd.DataFrame(rows)
-    out_path=get_next_result_path()
-    df.to_csv(out_path, index=False)
+        for s in range(args.seed[0], args.seed[1] + 1):
+            t0=time.time()
+            state, done, truncated = env.reset(seed=s)[0], False, False
+            cum_return = 0.0
+            while not done and not truncated:
+                action = {n: agents[n].take_action(state[n]) for n in names}
+                state, reward, done, truncated, info = env.step(action)
+                cum_return += np.mean(list(reward.values()))
+                done = all(done.values()); truncated = all(truncated.values())
+            infer_time = time.time() - t0  
+            root = names[0]
+            rows.append(dict(Episode=epi,
+                            Return=cum_return,
+                            Waiting=info[root]['system_total_waiting_time'],
+                            Queue=info[root]['system_total_stopped'],
+                            Speed=info[root]['system_mean_speed'],
+                            Time=time.strftime('%m-%d %H:%M:%S'),
+                            InferenceTime=infer_time,
+                            Seed=s))
+            print(f"Episode {epi}:\nreturn: {cum_return:.2f}")
+            print(f"Total Waiting Time: {rows[-1]['Waiting']}")
+            print(f"Total Queue: {rows[-1]['Queue']}")
+            print(f"Average speed: {rows[-1]['Speed']}")
+            print(f"Inference Time: {rows[-1]['InferenceTime']}")
+        env.close()
+        df = pd.DataFrame(rows)
+        out_path=get_next_result_path()
+        df.to_csv(out_path, index=False)
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser("MacLight evaluator")
@@ -116,6 +116,6 @@ if __name__ == '__main__':
     p.add_argument('-b','--block_num', type=int, default=8)
     p.add_argument('-s','--seconds', type=int, default=3600)
     p.add_argument('-e','--episodes', type=int, default=1)
-    p.add_argument('--seed', type=int, default=42)
+    p.add_argument('--seed', nargs='+', default=[42,46], type=int, help='Set a random seed range to run in sequence')
     p.add_argument('--gui', type=int, default=0)
     evaluate(p.parse_args())
