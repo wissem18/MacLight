@@ -17,12 +17,7 @@ from env.wrap.random_block import BlockStreet
 from util.tools import MARLWrap,build_adj_matrix,adj_to_edge_index
 import warnings
 warnings.filterwarnings('ignore')
-<<<<<<< HEAD
 from transformers import get_cosine_schedule_with_warmup
-=======
-
-
->>>>>>> cb8f8cf (add the real word dataset hangzhou_4x4 with 4 phases)
 # * ---------------------- Parameters -------------------------
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Ours mission')
