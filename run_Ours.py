@@ -74,10 +74,10 @@ if __name__ == '__main__':
             args.block_num = None
         
         if args.weather:
-            env = WeatherPerturb(env,seconds=args.seconds, start=0, end=-1)
+            env = WeatherPerturb(env,seconds=args.seconds, start=900, end=2700)
         args.model_name = 'Ours'
         latent_dim = 10
-        args.task = args.network + '_' + args.task + '_' + args.level
+        args.task = args.network + '_' + args.task + '_' + args.level + ('_rain' if args.weather else '')
 
     # PPO
     alg_args = {}
