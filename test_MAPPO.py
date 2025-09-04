@@ -1,15 +1,6 @@
-# test_MAPPO.py – Evaluate a trained MAPPO agent in inference mode
-# -----------------------------------------------------------
-# • Loads actor weights from a checkpoint file (same layout as Ours: ckpt['agent'][name].actor)
-# • Supports multiple networks (ff / hangzhou)
-# • Runs one or more SUMO episodes
-# • Computes cumulative metrics (return, system waiting time, stopped queue length, mean speed)
-# -----------------------------------------------------------
-
 import os, argparse, time, torch, numpy as np, pandas as pd, sumo_rl
 from pathlib import Path
 from net.net import PolicyNet
-from util.reward import exp_reward, exp_reward_1, simple_reward, composite_reward, composite_exp_reward
 from env.wrap.random_block import BlockStreet
 
 def get_next_result_path(directory="test", basename="eval_results", ext="csv"):
@@ -43,7 +34,6 @@ def make_env(level, seconds, network, gui):
         route_file=rou_file,
         num_seconds=seconds,
         use_gui=gui,
-        reward_fn=composite_exp_reward,
         sumo_warnings=False,
         additional_sumo_cmd='--no-step-log'
     )
@@ -57,16 +47,15 @@ def load_mappo_actors(agent_names, pt_path, device):
     ckpt = torch.load(str(ckpt_path), map_location=device)
     if 'agent' not in ckpt:
         raise KeyError("Checkpoint missing 'agent' key")
-    agent_blob = ckpt['agent']
-    states = {}
-    for name in agent_names:
-        if name not in agent_blob:
-            raise KeyError(f"Agent '{name}' not found in checkpoint['agent']")
-        actor = getattr(agent_blob[name], 'actor', None)
-        if actor is None:
-            raise KeyError(f"checkpoint['agent']['{name}'] has no 'actor'")
-        states[name] = actor.state_dict()
-    return states
+    agent_dict = ckpt['agent'].agents
+    policies = {}
+    policies = {}
+    for agent in agent_names:
+        if agent not in agent_dict:
+            raise KeyError(f"Agent {agent} not found in checkpoint")
+        actor_state = agent_dict[agent].actor.state_dict()
+        policies[agent] = actor_state
+    return policies
 
 @torch.no_grad()
 def evaluate(args):
@@ -96,7 +85,7 @@ def evaluate(args):
     for epi in range(1, args.episodes + 1):
         for s in range(args.seed[0],args.seed[1]+1):
             t0 = time.time()
-            state, done, truncated = env.reset(seed=args.seed)[0], False, False
+            state, done, truncated = env.reset(seed=s)[0], False, False
             cum_return = 0.0
             while not done and not truncated:
                 action = {}
@@ -119,7 +108,7 @@ def evaluate(args):
                 Speed=info[root]['system_mean_speed'],
                 Time=time.strftime('%m-%d %H:%M:%S'),
                 InferenceTime=infer_time,
-                Seed=args.seed
+                Seed=s
             ))
             print(f"Episode {epi}:\nreturn: {cum_return:.2f}")
             print(f"Total Waiting Time: {rows[-1]['Waiting']}")
