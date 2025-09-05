@@ -36,6 +36,30 @@ def build_adj_matrix(net_file: str, agent_ids) -> torch.BoolTensor:
     
     return adj
 
+def build_complete_adj_matrix(net_file: str, agent_ids) -> torch.BoolTensor:
+    """
+    Build a complete (fully connected) undirected adjacency over the given agents.
+
+    Parameters
+    ----------
+    net_file : str
+        Unused here (kept for API compatibility).
+    agent_ids : iterable[str]
+        List of traffic-light agent IDs (len = N).
+
+    Returns
+    -------
+    adj : torch.BoolTensor of shape (N, N)
+        adj[i, j] == True  for all i != j; diagonal is False.
+    """
+    N = len(agent_ids)
+    if N == 0:
+        return torch.zeros((0, 0), dtype=torch.bool)
+    adj = torch.ones((N, N), dtype=torch.bool)
+    adj.fill_diagonal_(False)
+    return adj
+
+
 def adj_to_edge_index(adj: torch.BoolTensor) -> torch.LongTensor:
     """
     adj : (N,N) BoolTensor – 1 ↔ edge exists (no self-loops)
