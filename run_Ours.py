@@ -14,7 +14,7 @@ from agent.Ours_agent import MacLight
 from tqdm import trange
 from net.net import PolicyNet, ValueNet, GATBlock
 from env.wrap.random_block import BlockStreet
-from util.tools import MARLWrap,build_adj_matrix,adj_to_edge_index
+from util.tools import MARLWrap,build_adj_matrix,adj_to_edge_index, build_complete_adj_matrix
 import warnings
 warnings.filterwarnings('ignore')
 from transformers import get_cosine_schedule_with_warmup
@@ -89,7 +89,7 @@ if __name__ == '__main__':
     system_type = sys.platform
 
     # ---------------------------- networks ------------------------------
-    adj_mask  = build_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
+    adj_mask  = build_complete_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
     edge_index = adj_to_edge_index(adj_mask).to(device)
     gat = GATBlock(d_in=33, d_out=global_emb_dim, heads=4, edge_index= edge_index, dropout=0.1).to(device)
     
