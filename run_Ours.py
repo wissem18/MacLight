@@ -21,20 +21,39 @@ from transformers import get_cosine_schedule_with_warmup
 # * ---------------------- Parameters -------------------------
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Ours mission')
-    parser.add_argument('--model_name', default="RPPO", type=str, help='The name of the base algorithm') 
+    parser.add_argument('--model_name', default="RPPO", type=str, help='The name of the base algorithm')
+    parser.add_argument('-r', '--representation', default=True, help='Whether or not to use VAE')  # If it is False, the model degenerates to IPPO
     parser.add_argument('-t', '--task', default="block", type=str, help='task: regular / block')
     parser.add_argument('-b', '--block_num', default=8, type=int, help='Number of blocked roads')
     parser.add_argument('-l', '--level', default='normal', type=str, help='Difficulty of the task: normal/hard')  # hard for Peak in paper
+    parser.add_argument('-n', '--network', default='ff', type=str,help='Scenario network key: ff / hangzhou')    
     parser.add_argument('-w', '--writer', default=0, type=int, help='Log mode, 0: no, 1: local')
     parser.add_argument('--seconds', default=3600, type=int, help='Simulation seconds')
     parser.add_argument('-e', '--episodes', default=80, type=int, help='Number of running episodes')
-    parser.add_argument('-s', '--seed', nargs='+', default=[42,46], type=int, help='Set a random seed range to run in sequence')
+    parser.add_argument('-s', '--seed', nargs='+', default=[42, 46], type=int, help='Set a random seed range to run in sequence')
     args = parser.parse_args()
 
     # ENV
+    NETWORK_TABLE = {
+    # synthetic network shipped with MacLight
+    "ff": {
+        "net":  "env/map/ff.net.xml",
+        "rou":  f'env/map/ff_{args.level}.rou.xml'
+    },
+    # Hangzhou real-world dataset (4-phase)
+    "hangzhou": {
+        "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
+        "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
+    }
+}
+    
+    net_file=NETWORK_TABLE[args.network]["net"]
+    route_file=NETWORK_TABLE[args.network]["rou"]   
+
+    # ENV
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    env = sumo_rl.parallel_env(net_file='env/map/ff.net.xml',
-                               route_file=f'env/map/ff_{args.level}.rou.xml',
+    env = sumo_rl.parallel_env(net_file=net_file,
+                               route_file=route_file,
                                num_seconds=args.seconds,
                                use_gui=False,
                                sumo_warnings=False,
@@ -51,13 +70,13 @@ if __name__ == '__main__':
         action_dim = action_dim[0]
         hidden_dim = hidden_dim[0]
 
-        if args.task == 'block':
+        if args.task == 'block' and args.network == 'ff':
             env = BlockStreet(env, args.block_num, args.seconds)
         else:
             args.block_num = None
 
         args.model_name = 'Ours_GAT'
-        args.task = args.task + '_' + args.level
+        args.task = args.network + '_' + args.task + '_' + args.level
     
 
     # PPO
