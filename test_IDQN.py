@@ -62,7 +62,6 @@ def load_idqn_qnets(agent_names, pt_path, device):
 def evaluate(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     env = make_env(args.level, args.seconds, args.network, bool(args.gui))
-
     names      = env.possible_agents
     state_dim  = env.observation_space(names[0]).shape[0]
     action_dim = env.action_space(names[0]).n
