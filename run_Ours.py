@@ -35,7 +35,7 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--episodes', default=80, type=int, help='Number of running episodes')
     parser.add_argument('-s', '--seed', nargs='+', default=[42,46], type=int, help='Set a random seed range to run in sequence')
     args = parser.parse_args()
-
+    
     # ENV
     NETWORK_TABLE = {
     # synthetic network shipped with MacLight
@@ -49,7 +49,8 @@ if __name__ == '__main__':
         "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
     }
 }
-    
+    perturbation_start = 600
+    perturbation_end = 1800
     net_file=NETWORK_TABLE[args.network]["net"]
     route_file=NETWORK_TABLE[args.network]["rou"]    
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -72,12 +73,12 @@ if __name__ == '__main__':
         hidden_dim = hidden_dim[0]
 
         if args.task == 'block' and args.network == 'ff':
-            env = BlockStreet(env, args.block_num, args.seconds)
+            env = BlockStreet(env, perturbation_start, perturbation_end, args.block_num, args.seconds)
         else:
             args.block_num = None
         
         if args.weather:
-            env = WeatherPerturb(env,seconds=args.seconds, start=600, end=1800)
+            env = WeatherPerturb(env,seconds=args.seconds, start=perturbation_start, end=perturbation_end)
         args.model_name = 'Ours_GATv2_temporal_encoder'
         args.task = args.network + '_' + args.task + '_' + args.level + '_rain'
     
