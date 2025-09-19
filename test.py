@@ -59,7 +59,7 @@ def evaluate(args):
     hidden_dim  = (state_dim+32) * 2
 
     if args.task == 'block':
-        env = BlockStreet(env, args.block_num, args.seconds)
+        env = BlockStreet(env,0,3600, args.block_num, args.seconds)
 
     # Load all agents' actor policies
     actor_states = load_agents_from_pt(names, args.ckpt, device)

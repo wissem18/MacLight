@@ -32,7 +32,7 @@ class BlockStreet:
         Randomly block 8 road sections every 200 seconds only inside the time window of start_block and end_block,
         unblock them at the end of 200 seconds and set new blocking targets
         '''
-        block_active = (self.start_block <= self.time < self.end_block)
+        block_active = (self.start_block <= self.time <= self.end_block)
         if block_active:
             if self.time % 200 != 0:
                 for edge_id in self.rd_id:  # 阻塞通行
