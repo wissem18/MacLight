@@ -81,7 +81,7 @@ def evaluate(args):
     for epi in range(1, args.episodes + 1):
         for s in range(args.seed[0],args.seed[1]+1):
             t0=time.time()
-            state, done, truncated = env.reset(seed=args.seed)[0], False, False
+            state, done, truncated = env.reset(seed=s)[0], False, False
             cum_return = 0.0
             while not done and not truncated:
                 action = {n: agents[n].take_action(state[n]) for n in names}
@@ -97,7 +97,7 @@ def evaluate(args):
                             Speed=info[root]['system_mean_speed'],
                             Time=time.strftime('%m-%d %H:%M:%S'),
                             InferenceTime=infer_time,
-                            Seed=args.seed))
+                            Seed=s))
             print(f"Episode {epi}:\nreturn: {cum_return:.2f}")
             print(f"Total Waiting Time: {rows[-1]['Waiting']}")
             print(f"Total Queue: {rows[-1]['Queue']}")
