@@ -79,8 +79,7 @@ if __name__ == '__main__':
         if args.weather:
             env = WeatherPerturb(env,seconds=args.seconds, start=600, end=1800)
         args.model_name = 'Ours_GATv2_temporal_encoder'
-        latent_dim = 10
-        args.task = args.task + '_' + args.level
+        args.task = args.network + '_' + args.task + '_' + args.level + '_rain'
     
     # Transformer settings  ---------------------------------- #
     K_HISTORY   = 8        # deque length for TemporalEncoder

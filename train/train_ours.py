@@ -42,6 +42,7 @@ def train_ours_agent(
     best_score = -1e10
     actor_best_weight = {}
     critic_best_weight = {}
+    step_log = {}
 
     
     for episode in range(total_episodes):
@@ -135,6 +136,8 @@ def train_ours_agent(
         att_stack = torch.stack(attn_weights_list)        
         np.savez_compressed(save_path, att_stack.numpy())
         print(f"saved raw attention tensor → {os.path.getsize(save_path)/1e6:.1f} MB")  
+                                    
+    np.savez_compressed(f"{ckpt_path}/{seed}_step_metrics.npz",step_log=step_log)
     env.close()
     total_time = time.time() - start_time
     print(f"\033[32m[ Total time ]\033[0m {(total_time / 60):.2f} min")
