@@ -5,6 +5,7 @@
 # • Computes cumulative metrics (return,system waiting time, stopped queue length, mean speed)
 # -----------------------------------------------------------
 
+from env.wrap.weather_perturbation import WeatherPerturb
 import os, argparse, time, torch, numpy as np, pandas as pd, sumo_rl, sys
 from pathlib import Path
 from net.net import PolicyNet, ValueNet
@@ -22,7 +23,7 @@ def get_next_result_path(directory="test", basename="eval_results", ext="csv"):
         except Exception:
             continue
     n = 1 if not nums else max(nums) + 1
-    return os.path.join(directory, f"{basename}_{n}.{ext}")
+    return os.path.join(directory, f"{basename}_{n}.{ext}"),n
 
 def load_agents_from_pt(agent_names, pt_path, device):
     pt_path = Path(pt_path)
@@ -50,6 +51,8 @@ def make_env(level, seconds, gui):
     return env
 
 def evaluate(args):
+    perturbation_start = 600
+    perturbation_end = 1800
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     env = make_env(args.level, args.seconds, bool(args.gui))
 
@@ -59,8 +62,10 @@ def evaluate(args):
     hidden_dim  = (state_dim+32) * 2
 
     if args.task == 'block':
-        env = BlockStreet(env,0,3600, args.block_num, args.seconds)
+        env = BlockStreet(env, perturbation_start, perturbation_end, args.block_num, args.seconds)
 
+    if args.weather:
+        env=WeatherPerturb(env,seconds=args.seconds,start=perturbation_start,end=perturbation_end)
     # Load all agents' actor policies
     actor_states = load_agents_from_pt(names, args.ckpt, device)
     policies = {}
@@ -78,16 +83,27 @@ def evaluate(args):
         agents[n].device = device
 
     rows = []
+    step_log={}
     for epi in range(1, args.episodes + 1):
         for s in range(args.seed[0],args.seed[1]+1):
             t0=time.time()
             state, done, truncated = env.reset(seed=s)[0], False, False
             cum_return = 0.0
+            step_log[epi] = {"t": [], "ret": [],"wait": [],"queue": [],"speed": []}
+            sim_time= 0
             while not done and not truncated:
                 action = {n: agents[n].take_action(state[n]) for n in names}
                 state, reward, done, truncated, info = env.step(action)
                 cum_return += np.mean(list(reward.values()))
                 done = all(done.values()); truncated = all(truncated.values())
+                # --- record per-step metrics -----------------------------
+                step_log[epi]["t"].append(sim_time)
+                step_log[epi]["ret"].append(np.mean(list(reward.values())))
+                step_log[epi]["wait"].append(info[names[0]]["system_total_waiting_time"])
+                step_log[epi]["queue"].append(info[names[0]]["system_total_stopped"])
+                step_log[epi]["speed"].append(info[names[0]]["system_mean_speed"])
+                sim_time += 5
+
             infer_time = time.time() - t0  
             root = names[0]
             rows.append(dict(Episode=epi,
@@ -106,8 +122,9 @@ def evaluate(args):
         env.close()
 
         df = pd.DataFrame(rows)
-        out_path=get_next_result_path()
+        out_path,cur=get_next_result_path()
         df.to_csv(out_path, index=False)
+        # np.savez_compressed(f"test/{cur}_step_metrics.npz",step_log=step_log)
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser("MacLight evaluator")
@@ -115,6 +132,7 @@ if __name__ == '__main__':
     p.add_argument('-t','--task', default='block', choices=['block','regular'])
     p.add_argument('-l','--level', default='normal', choices=['normal','hard'])
     p.add_argument('-b','--block_num', type=int, default=8)
+    p.add_argument('--weather', default=0, type=int, help='Whether or not to add the weather perturbation scenario')
     p.add_argument('-s','--seconds', type=int, default=3600)
     p.add_argument('-e','--episodes', type=int, default=1)
     p.add_argument('--seed',nargs='+', type=int, default=[42,46], help="Set a random seed range to run in sequence")
