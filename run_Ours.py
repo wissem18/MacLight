@@ -27,7 +27,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_name', default="RPPO", type=str, help='The name of the base algorithm') 
     parser.add_argument('-t', '--task', default="block", type=str, help='task: regular / block')
     parser.add_argument('-b', '--block_num', default=8, type=int, help='Number of blocked roads')
-    parser.add_argument('-l', '--level', default='normal', type=str, help='Difficulty of the task: normal/hard')  # hard for Peak in paper
+    parser.add_argument('-l', '--level', default='normal', type=str, help='Difficulty of the task: normal/hard/mixed')  # hard for Peak in paper
     parser.add_argument('--weather', default=0,type=int, help='Whether or not to add the weather perturbation to scenario')
     parser.add_argument('-n', '--network', default='ff', type=str,help='Scenario network key: ff / hangzhou')    
     parser.add_argument('-w', '--writer', default=0, type=int, help='Log mode, 0: no, 1: local')
