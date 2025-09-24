@@ -84,12 +84,12 @@ def evaluate(args):
 
     rows = []
     step_log={}
-    for epi in range(1, args.episodes + 1):
-        for s in range(args.seed[0],args.seed[1]+1):
+    for s in range(args.seed[0],args.seed[1]+1):
+        for epi in range(1, args.episodes + 1):
             t0=time.time()
             state, done, truncated = env.reset(seed=s)[0], False, False
             cum_return = 0.0
-            step_log[epi] = {"t": [], "ret": [],"wait": [],"queue": [],"speed": []}
+            step_log[s][epi] = {"t": [], "ret": [],"wait": [],"queue": [],"speed": []}
             sim_time= 0
             while not done and not truncated:
                 action = {n: agents[n].take_action(state[n]) for n in names}
@@ -97,11 +97,11 @@ def evaluate(args):
                 cum_return += np.mean(list(reward.values()))
                 done = all(done.values()); truncated = all(truncated.values())
                 # --- record per-step metrics -----------------------------
-                step_log[epi]["t"].append(sim_time)
-                step_log[epi]["ret"].append(np.mean(list(reward.values())))
-                step_log[epi]["wait"].append(info[names[0]]["system_total_waiting_time"])
-                step_log[epi]["queue"].append(info[names[0]]["system_total_stopped"])
-                step_log[epi]["speed"].append(info[names[0]]["system_mean_speed"])
+                step_log[s][epi]["t"].append(sim_time)
+                step_log[s][epi]["ret"].append(np.mean(list(reward.values())))
+                step_log[s][epi]["wait"].append(info[names[0]]["system_total_waiting_time"])
+                step_log[s][epi]["queue"].append(info[names[0]]["system_total_stopped"])
+                step_log[s][epi]["speed"].append(info[names[0]]["system_mean_speed"])
                 sim_time += 5
 
             infer_time = time.time() - t0  
@@ -124,7 +124,7 @@ def evaluate(args):
         df = pd.DataFrame(rows)
         out_path,cur=get_next_result_path()
         df.to_csv(out_path, index=False)
-        # np.savez_compressed(f"test/{cur}_step_metrics.npz",step_log=step_log)
+        np.savez_compressed(f"test/{cur}_step_metrics.npz",step_log=step_log)
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser("MacLight evaluator")
