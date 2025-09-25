@@ -442,10 +442,6 @@ def compute_all(
     return dict(
         auc_ratio=auc,
         peak_loss=Lmax,
-        t_peak=tpeak,
         rt_target=rt,
-        recovery_slope=slope,
         residual_delta=rdelta,
-        overshoot=os,
-        settling_time=st,
     )

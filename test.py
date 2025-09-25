@@ -59,7 +59,7 @@ def evaluate(args):
     names       = env.possible_agents
     state_dim   = env.observation_space(names[0]).shape[0]
     action_dim  = env.action_space(names[0]).n
-    hidden_dim  = (state_dim+32) * 2
+    hidden_dim  = (state_dim) * 2
 
     if args.task == 'block':
         env = BlockStreet(env, perturbation_start, perturbation_end, args.block_num, args.seconds)
@@ -85,6 +85,7 @@ def evaluate(args):
     rows = []
     step_log={}
     for s in range(args.seed[0],args.seed[1]+1):
+        step_log[s]={}
         for epi in range(1, args.episodes + 1):
             t0=time.time()
             state, done, truncated = env.reset(seed=s)[0], False, False
@@ -121,10 +122,10 @@ def evaluate(args):
             print(f"Inference Time: {rows[-1]['InferenceTime']}")
         env.close()
 
-        df = pd.DataFrame(rows)
-        out_path,cur=get_next_result_path()
-        df.to_csv(out_path, index=False)
-        np.savez_compressed(f"test/{cur}_step_metrics.npz",step_log=step_log)
+    df = pd.DataFrame(rows)
+    out_path,cur=get_next_result_path()
+    df.to_csv(out_path, index=False)
+    np.savez_compressed(f"test/{cur}_step_metrics.npz",step_log=step_log)
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser("MacLight evaluator")
