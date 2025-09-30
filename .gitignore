@@ -14,6 +14,7 @@ ckpt/
 data/
 log/
 test/
+testv2/
 image/blocked_exp
 model/
 data_to_image.py
