@@ -13,7 +13,7 @@ from train.train_ours import train_ours_agent
 from agent.Ours_agent import MacLight
 from tqdm import trange
 from net.net import PolicyNet, ValueNet, GATBlock, TemporalEncoder, DynamicPredictor
-from env.wrap.random_block import BlockStreet
+from env.wrap.random_block import BlockStreet,SplitBlockStreet
 from util.tools import MARLWrap,build_adj_matrix,adj_to_edge_index
 import warnings
 warnings.filterwarnings('ignore')
@@ -73,14 +73,14 @@ if __name__ == '__main__':
         hidden_dim = hidden_dim[0]
 
         if args.task == 'block' and args.network == 'ff':
-            env = BlockStreet(env, perturbation_start, perturbation_end, args.block_num, args.seconds)
+            env = SplitBlockStreet(env, perturbation_start, perturbation_end)
         else:
             args.block_num = None
         
         if args.weather:
             env = WeatherPerturb(env,seconds=args.seconds, start=perturbation_start, end=perturbation_end)
         args.model_name = 'Ours_GATv2_temporal_encoder'
-        args.task = args.network + '_' + args.task + '_' + args.level
+        args.task = args.network + '_' + args.task + '_' + args.level + '_v2'
     
     # Transformer settings  ---------------------------------- #
     K_HISTORY   = 8        # deque length for TemporalEncoder

@@ -11,7 +11,7 @@ from pathlib import Path
 from net.net import PolicyNet, ValueNet
 from agent.Ours_agent import MacLight
 from util.tools import MARLWrap
-from env.wrap.random_block import BlockStreet
+from env.wrap.random_block import BlockStreet, SplitBlockStreet
 
 def get_next_result_path(directory="test", basename="eval_results", ext="csv"):
     existing = [f for f in os.listdir(directory) if f.startswith(basename) and f.endswith('.'+ext)]
@@ -51,18 +51,18 @@ def make_env(level, seconds, gui):
     return env
 
 def evaluate(args):
-    perturbation_start = 600
-    perturbation_end = 1800
+    perturbation_start = 0
+    perturbation_end = 3600
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     env = make_env(args.level, args.seconds, bool(args.gui))
 
     names       = env.possible_agents
     state_dim   = env.observation_space(names[0]).shape[0]
     action_dim  = env.action_space(names[0]).n
-    hidden_dim  = (state_dim) * 2
+    hidden_dim  = (state_dim + 32) * 2
 
     if args.task == 'block':
-        env = BlockStreet(env, perturbation_start, perturbation_end, args.block_num, args.seconds)
+        env = BlockStreet(env, perturbation_start, perturbation_end)
 
     if args.weather:
         env=WeatherPerturb(env,seconds=args.seconds,start=perturbation_start,end=perturbation_end)

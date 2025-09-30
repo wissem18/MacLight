@@ -66,12 +66,15 @@ class BlockStreet:
     def close(self):
         self.env.close()
 
+
 class SplitBlockStreet:
-    def __init__(self, env, mode="train", block_num=4, seconds=3600) -> None:
+    def __init__(self, env,start, end, mode="train", block_num=4, seconds=3600) -> None:
         self.env = env
         self.time = 0
         self.block_num = block_num
         self.end_time = seconds
+        self.start_block = start
+        self.end_block = end
         self.possible_agents = env.possible_agents
         self.mode = mode  # "train" or "test"
 
@@ -93,9 +96,10 @@ class SplitBlockStreet:
 
         # Initial random pick
         self.rd_id = torch.randperm(len(self.blockable_edges))[:self.block_num]
-
+        self.was_blocking = False # Track if we were in blocking scenario in previous step
     def reset(self, seed=None):
         self.time = 0
+        self.was_blocking = False
         return self.env.reset(seed=seed) if seed else self.env.reset()
 
     def step(self, action):
@@ -103,17 +107,30 @@ class SplitBlockStreet:
         Randomly block k road sections every 300 seconds,
         unblock them at the end of 300 seconds and set new blocking targets
         """
-        if self.time % 300 != 0:
-            for edge_id in self.rd_id:
-                traci.edge.setMaxSpeed(self.blockable_edges[edge_id], 0.5)
-            for vid in traci.vehicle.getIDList():
-                traci.vehicle.rerouteTraveltime(vid)
+        block_active = (self.start_block <= self.time <= self.end_block)
+        if block_active:
+            if self.time % 300 != 0:
+                for edge_id in self.rd_id:  # 阻塞通行
+                    traci.edge.setMaxSpeed(self.blockable_edges[edge_id], 0.5)  # m/s
+                vehicle_ids = traci.vehicle.getIDList()
+                for vehicle_id in vehicle_ids:
+                    traci.vehicle.rerouteTraveltime(vehicle_id)  # 车辆重新规划路径
+            else:
+                for edge_id in self.rd_id:  # 恢复通行
+                    traci.edge.setMaxSpeed(
+                        self.blockable_edges[edge_id], 13.89)  # m/s
+                vehicle_ids = traci.vehicle.getIDList()
+                for vehicle_id in vehicle_ids:
+                    traci.vehicle.rerouteTraveltime(vehicle_id)
+                self.rd_id = torch.randperm(len(self.blockable_edges))[:self.block_num]  # 重新抽n个车道
+            self.was_blocking = True    
         else:
-            for edge_id in self.rd_id:
-                traci.edge.setMaxSpeed(self.blockable_edges[edge_id], 13.89)
-            for vid in traci.vehicle.getIDList():
-                traci.vehicle.rerouteTraveltime(vid)
-            self.rd_id = torch.randperm(len(self.blockable_edges))[:self.block_num]
+            if self.was_blocking:
+                for edge_id in self.rd_id:
+                    traci.edge.setMaxSpeed(self.blockable_edges[edge_id], 13.89)
+                for vid in traci.vehicle.getIDList():
+                    traci.vehicle.rerouteTraveltime(vid)
+                self.was_blocking = False
 
         self.time += 5
         next_state, reward, done, truncated, info = self.env.step(action)
