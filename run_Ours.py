@@ -12,7 +12,7 @@ from train.train_ours import train_ours_agent
 from agent.Ours_agent import MacLight
 from tqdm import trange
 from net.net import PolicyNet, ValueNet, VAE
-from env.wrap.random_block import BlockStreet
+from env.wrap.random_block import BlockStreet, SplitBlockStreet
 from env.wrap.weather_perturbation import WeatherPerturb
 from util.tools import MARLWrap
 import warnings
@@ -47,7 +47,8 @@ if __name__ == '__main__':
         "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
     }
 }
-    
+    perturbation_start = 600
+    perturbation_end = 1800
     net_file=NETWORK_TABLE[args.network]["net"]
     route_file=NETWORK_TABLE[args.network]["rou"]    
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -77,7 +78,7 @@ if __name__ == '__main__':
             env = WeatherPerturb(env,seconds=args.seconds, start=900, end=2700)
         args.model_name = 'Ours'
         latent_dim = 10
-        args.task = args.network + '_' + args.task + '_' + args.level + ('_rain' if args.weather else '')
+        args.task = args.network + '_' + args.task + '_' + args.level + '_v2'
 
     # PPO
     alg_args = {}
