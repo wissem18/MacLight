@@ -72,8 +72,8 @@ if __name__ == '__main__':
         action_dim = action_dim[0]
         hidden_dim = hidden_dim[0]
 
-        if args.task == 'block' and args.network == 'ff':
-            env = SplitBlockStreet(env, perturbation_start, perturbation_end)
+        if args.task == 'block':
+            env = BlockStreet(env,perturbation_start,perturbation_end,args.network, args.block_num, args.seconds)
         else:
             args.block_num = None
         

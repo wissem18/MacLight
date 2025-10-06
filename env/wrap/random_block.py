@@ -4,21 +4,33 @@ import traci
 
 
 class BlockStreet:
-    def __init__(self, env,start, end, block_num=8, seconds=3600) -> None:
+    def __init__(self, env,start, end, network, block_num=8, seconds=3600) -> None:
         self.env = env
         self.time = 0
+        self.network=network
         # blockable edges can be refer to light yellow parts in `./doc.map_indicator.pdf`
         self.block_num = block_num
         self.start_block = start
         self.end_block = end
         self.end_time = seconds
         self.possible_agents = env.possible_agents
-
-        self.blockable_edges = ['B2C2', 'B3C3', 'C1C2', 'C2B2', 'C2C1',
+        self.blockable_edges=[]
+        if self.network=='ff':
+            self.blockable_edges = ['B2C2', 'B3C3', 'C1C2', 'C2B2', 'C2C1',
                                 'C2C3', 'C2D2', 'C3B3', 'C3C2', 'C3C4',
                                 'C3D3', 'C4C3', 'D1D2', 'D2C2', 'D2D1',
                                 'D2D3', 'D2E2', 'D3C3', 'D3D2', 'D3D4',
                                 'D3E3', 'D4D3', 'E2D2', 'E3D3',]
+        else:
+            self.blockable_edges = [
+                "road_2_4_3", "road_2_3_1", "road_2_3_3", "road_2_2_1",
+                "road_2_2_3", "road_2_1_1", "road_3_2_3", "road_3_1_1",
+                "road_3_3_3", "road_3_2_1", "road_3_4_3", "road_3_3_1",
+                "road_2_3_2", "road_1_3_0", "road_3_3_2", "road_2_3_0",
+                "road_4_3_2", "road_3_3_0", "road_4_2_2", "road_3_2_0",
+                "road_3_2_2", "road_2_2_0", "road_2_2_2", "road_1_2_0"
+            ]
+
         self.rd_id = torch.randperm(len(self.blockable_edges))[:self.block_num]
         self.was_blocking = False # Track if we were in blocking scenario in previous step
     def reset(self, seed=None):
