@@ -51,18 +51,18 @@ def make_env(level, seconds, gui):
     return env
 
 def evaluate(args):
-    perturbation_start = 0
-    perturbation_end = 3600
+    perturbation_start = 600
+    perturbation_end = 1800
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     env = make_env(args.level, args.seconds, bool(args.gui))
 
     names       = env.possible_agents
     state_dim   = env.observation_space(names[0]).shape[0]
     action_dim  = env.action_space(names[0]).n
-    hidden_dim  = (state_dim + 32) * 2
+    hidden_dim  = (state_dim) * 2
 
     if args.task == 'block':
-        env = BlockStreet(env, perturbation_start, perturbation_end)
+        env = SplitBlockStreet(env, perturbation_start, perturbation_end, mode='test')
 
     if args.weather:
         env=WeatherPerturb(env,seconds=args.seconds,start=perturbation_start,end=perturbation_end)
