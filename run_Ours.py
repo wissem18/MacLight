@@ -69,7 +69,7 @@ if __name__ == '__main__':
         hidden_dim = hidden_dim[0]
 
         if args.task == 'block' and args.network == 'ff':
-            env = BlockStreet(env, args.block_num, args.seconds)
+            env = BlockStreet(env,args.network, args.block_num, args.seconds)
         else:
             args.block_num = None
         
