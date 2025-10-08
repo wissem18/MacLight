@@ -41,9 +41,23 @@ def load_agents_from_pt(agent_names, pt_path, device):
         policies[agent] = actor_state
     return policies
 
-def make_env(level, seconds, gui):
-    env = sumo_rl.parallel_env(net_file='env/map/ff.net.xml',
-                               route_file=f'env/map/ff_{level}.rou.xml',
+def make_env(level, seconds, network, gui):
+    NETWORK_TABLE = {
+    # synthetic network shipped with MacLight
+    "ff": {
+        "net":  "env/map/ff.net.xml",
+        "rou":  f'env/map/ff_{level}.rou.xml'
+    },
+    # Hangzhou real-world dataset (4-phase)
+    "hangzhou": {
+        "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
+        "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
+    }
+}
+    net_file=NETWORK_TABLE[network]['net']
+    rou_file=NETWORK_TABLE[network]['rou']
+    env = sumo_rl.parallel_env(net_file=net_file,
+                               route_file=rou_file,
                                num_seconds=seconds,
                                use_gui=gui,
                                sumo_warnings=False,
@@ -51,18 +65,18 @@ def make_env(level, seconds, gui):
     return env
 
 def evaluate(args):
-    perturbation_start = 600
-    perturbation_end = 1800
+    perturbation_start = 1200
+    perturbation_end = 2400
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    env = make_env(args.level, args.seconds, bool(args.gui))
+    env = make_env(args.level, args.seconds,args.network, bool(args.gui))
 
     names       = env.possible_agents
     state_dim   = env.observation_space(names[0]).shape[0]
     action_dim  = env.action_space(names[0]).n
-    hidden_dim  = (state_dim) * 2
+    hidden_dim  = (state_dim+32) * 2
 
     if args.task == 'block':
-        env = SplitBlockStreet(env, perturbation_start, perturbation_end, mode='test')
+        env = BlockStreet(env, perturbation_start, perturbation_end,args.network,block_num=args.block_num)
 
     if args.weather:
         env=WeatherPerturb(env,seconds=args.seconds,start=perturbation_start,end=perturbation_end)
@@ -133,6 +147,7 @@ if __name__ == '__main__':
     p.add_argument('-t','--task', default='block', choices=['block','regular'])
     p.add_argument('-l','--level', default='normal', choices=['normal','hard'])
     p.add_argument('-b','--block_num', type=int, default=8)
+    p.add_argument('-n', '--network', default='ff', type=str, help='Scenario network key: ff/hangzhou')
     p.add_argument('--weather', default=0, type=int, help='Whether or not to add the weather perturbation scenario')
     p.add_argument('-s','--seconds', type=int, default=3600)
     p.add_argument('-e','--episodes', type=int, default=1)

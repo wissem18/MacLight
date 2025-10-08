@@ -13,8 +13,7 @@ server_log/
 ckpt/
 data/
 log/
-test/
-testv2/
+test*/
 image/blocked_exp
 model/
 data_to_image.py
