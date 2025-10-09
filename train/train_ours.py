@@ -5,7 +5,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
-from net.net import GATBlock, TemporalEncoder, DynamicPredictor
+from net.net import SATBlock, TemporalEncoder, DynamicPredictor
 
 # declare the device
 global device
@@ -15,11 +15,11 @@ def train_ours_agent(
     env: object,
     agents: object,
     agent_name: list,
-    gat: GATBlock,
+    sat: SATBlock,
     temp_enc: TemporalEncoder,
     predictor: DynamicPredictor,
-    gat_optimizer,
-    gat_scheduler,
+    sat_optimizer,
+    sat_scheduler,
     writer: int,
     total_episodes: int,
     seed: int,
@@ -91,26 +91,26 @@ def train_ours_agent(
         seed_list.append(seed)
         
         # * ---- update agent and attention--- 
-        gat_optimizer.zero_grad()          # clear shared grads
+        sat_optimizer.zero_grad()          # clear shared grads
         for agt_name in agent_name:
             actor_loss, critic_loss,pred_loss = agents[agt_name].update(
-                    transition_dict, agt_name,gat, temp_enc, predictor,
+                    transition_dict, agt_name,sat, temp_enc, predictor,
                     accumulate_attn_grad=True)   # ← grads accumulate
             ep_actor.append(actor_loss)
             ep_critic.append(critic_loss)
             ep_pred.append(pred_loss)
 
-        gat_optimizer.step()               # single shared step
-        gat_scheduler.step()
+        sat_optimizer.step()               # single shared step
+        sat_scheduler.step()
         
         # store per-episode means
         actor_loss_list.append(float(np.mean(ep_actor)))
         critic_loss_list.append(float(np.mean(ep_critic)))
         pred_loss_list.append(float(np.mean(ep_pred)))
 
-        attn_weights_list.append(
-            agents[agent_name[0]].get_full_attention()
-        )
+        # attn_weights_list.append(
+        #     agents[agent_name[0]].get_full_attention()
+        # )
 
         # read best weights
         if episode_return > best_score:

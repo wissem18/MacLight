@@ -71,8 +71,8 @@ class MacLight:
             z_t     = z_all[:, idx, :]                                      # (T,d)  this node
             z_next  = torch.cat([z_t[1:], z_t[-1:].clone()], dim=0)
 
-            if epoch == self.epochs - 1:
-                self.full_A = A.detach().cpu().to(torch.float16)
+            # if epoch == self.epochs - 1:
+            #     self.full_A = A.detach().cpu().to(torch.float16)
 
             # 2 – critic targets
             v_now  = self.critic(states, z_t)
@@ -110,7 +110,7 @@ class MacLight:
 
     # ---- helpers --------------------------------------------------------
     def get_attn_lr_history(self):       return self.lr_history
-    def get_full_attention(self):   return self.full_A
+    # def get_full_attention(self):   return self.full_A
 
     @staticmethod
     def compute_advantage(gamma, lmbda, td_delta):

@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv as GATConv
-
+from torch_geometric.data import Data, Batch
+import sys
+sys.path.append("external/SAT")  
+from sat import GraphTransformer
 class PolicyNet(torch.nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
         super().__init__()
@@ -47,7 +50,64 @@ class ObsEmbedding(nn.Module):
         # output dim = 32
     def forward(self, x):                # x : (B,N,d_in)
         return self.mlp(x)               # (B,N,32)
-    
+
+
+class SATBlock(nn.Module):
+    """
+    Structure-Aware Transformer spatial encoder.
+      forward(H) -> (B, N, d_out)
+    Notes:
+      - Uses the official GraphTransformer (node-level outputs, no classifier head).
+      - No edge features required.
+    """
+    def __init__(self, d_in=33, d_out=32,
+                 edge_index=None, dropout=0.1,
+                 k_hop=2, gnn_type="pna", num_layers=2):
+        super().__init__()
+        assert edge_index is not None, "edge_index required"
+        self.register_buffer("edge_index", edge_index)     # (2, E), long, no grad
+        self.embed = ObsEmbedding(d_in=d_in, hidden_size=32)
+
+        # IMPORTANT: We want node-level embeddings → num_class=None and no global_pool in GraphTransformer
+        self.sat = GraphTransformer(
+            in_size=32,                  # we feed the 32-dim ObsEmbedding output
+            num_class=d_out,              # no classifier head
+            d_model=d_out,               # final per-node embedding dim == d_out
+            dim_feedforward=2 * d_out,
+            num_layers=num_layers,       # SAT transformer depth
+            batch_norm=True,
+            gnn_type=gnn_type,           # "pna" | "gcn" | "gine"
+            use_edge_attr=False,         # you said no edge features
+            num_edge_features=0,
+            edge_dim=d_out,              # irrelevant when use_edge_attr=False
+            k_hop=k_hop,                 # structure extractor depth
+            se="gnn",                # or "khopgnn"; start with "gnn"
+            dropout=dropout,
+            global_pool=None       # ← IMPORTANT: disable graph pooling to keep node outputs
+        )
+        class IdentityPool(nn.Module):
+            def forward(self, x, batch):
+                return x
+        self.sat.embedding = torch.nn.Identity()
+        # 2) Disable graph pooling but keep the call site happy
+        self.sat.pooling = IdentityPool()
+
+    def forward(self, H):                 # H: (B, N, d_in)
+        B, N, _ = H.size()
+        H_emb = self.embed(H)             # (B, N, 32)
+        # Run SAT per batch item (shared graph, different features)
+        outs = []
+        for b in range(B):
+            data = Data(x=H_emb[b], edge_index=self.edge_index)  # x: (N,32)
+             # IMPORTANT: make a Batch so .ptr exists
+            batch = Batch.from_data_list([data])
+            batch = batch.to(H.device)
+            z_b = self.sat(batch)                                 # (N, d_out)
+            outs.append(z_b)
+        Z = torch.stack(outs, dim=0)                             # (B, N, d_out)
+        # For API parity with your GATBlock, return attn=None
+        return Z,None
+
 
 class GATBlock(nn.Module):
     """
