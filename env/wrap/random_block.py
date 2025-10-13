@@ -50,23 +50,23 @@ class BlockStreet:
                 for edge_id in self.rd_id:  # 阻塞通行
                     traci.edge.setMaxSpeed(self.blockable_edges[edge_id], 0.5)  # m/s
                 vehicle_ids = traci.vehicle.getIDList()
-                for vehicle_id in vehicle_ids:
-                    traci.vehicle.rerouteTraveltime(vehicle_id)  # 车辆重新规划路径
+                # for vehicle_id in vehicle_ids:
+                #     traci.vehicle.rerouteTraveltime(vehicle_id)  # 车辆重新规划路径
             else:
                 for edge_id in self.rd_id:  # 恢复通行
                     traci.edge.setMaxSpeed(
                         self.blockable_edges[edge_id], 13.89)  # m/s
                 vehicle_ids = traci.vehicle.getIDList()
-                for vehicle_id in vehicle_ids:
-                    traci.vehicle.rerouteTraveltime(vehicle_id)
+                # for vehicle_id in vehicle_ids:
+                #     traci.vehicle.rerouteTraveltime(vehicle_id)
                 self.rd_id = torch.randperm(len(self.blockable_edges))[:self.block_num]  # 重新抽n个车道
             self.was_blocking = True    
         else:
             if self.was_blocking:
                 for edge_id in self.rd_id:
                     traci.edge.setMaxSpeed(self.blockable_edges[edge_id], 13.89)
-                for vid in traci.vehicle.getIDList():
-                    traci.vehicle.rerouteTraveltime(vid)
+                # for vid in traci.vehicle.getIDList():
+                #     traci.vehicle.rerouteTraveltime(vid)
                 self.was_blocking = False
 
         self.time += 5

@@ -145,7 +145,7 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser("MacLight evaluator")
     p.add_argument('--ckpt', required=True, help='Directory containing the .pt checkpoint')
     p.add_argument('-t','--task', default='block', choices=['block','regular'])
-    p.add_argument('-l','--level', default='normal', choices=['normal','hard'])
+    p.add_argument('-l','--level', default='normal', choices=['normal','hard','stochastic_normal'])
     p.add_argument('-b','--block_num', type=int, default=8)
     p.add_argument('-n', '--network', default='ff', type=str, help='Scenario network key: ff/hangzhou')
     p.add_argument('--weather', default=0, type=int, help='Whether or not to add the weather perturbation scenario')
