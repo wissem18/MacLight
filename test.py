@@ -61,6 +61,7 @@ def make_env(level, seconds, network, gui):
                                num_seconds=seconds,
                                use_gui=gui,
                                sumo_warnings=False,
+                               time_to_teleport=120,
                                additional_sumo_cmd='--no-step-log')
     return env
 

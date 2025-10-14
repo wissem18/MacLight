@@ -59,6 +59,7 @@ if __name__ == '__main__':
                                num_seconds=args.seconds,
                                use_gui=False,
                                sumo_warnings=False,
+                               time_to_teleport=120,
                                additional_sumo_cmd='--no-step-log')
                                
     # Neural Networks
