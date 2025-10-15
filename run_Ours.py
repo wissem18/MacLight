@@ -25,7 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--representation', default=True, help='Whether or not to use VAE')  # If it is False, the model degenerates to IPPO
     parser.add_argument('-t', '--task', default="block", type=str, help='task: regular / block')
     parser.add_argument('-b', '--block_num', default=8, type=int, help='Number of blocked roads')
-    parser.add_argument('-l', '--level', default='normal', type=str, help='Difficulty of the task: normal/hard/mixed')  # hard for Peak in paper
+    parser.add_argument('-l', '--level', default='normal', type=str, help='Difficulty of the task: normal/hard/mixed/stochastic_normal')  # hard for Peak in paper
     parser.add_argument('--weather', default=0,type=int, help='Whether or not to add the weather perturbation to scenario')
     parser.add_argument('-n', '--network', default='ff', type=str,help='Scenario network key: ff / hangzhou')    
     parser.add_argument('-w', '--writer', default=0, type=int, help='Log mode, 0: no, 1: local')
@@ -57,6 +57,7 @@ if __name__ == '__main__':
                                num_seconds=args.seconds,
                                use_gui=False,
                                sumo_warnings=False,
+                               time_to_teleport=120,
                                additional_sumo_cmd='--no-step-log')
                                
     # Neural Networks
@@ -78,7 +79,7 @@ if __name__ == '__main__':
             env = WeatherPerturb(env,seconds=args.seconds, start=900, end=2700)
         args.model_name = 'Ours'
         latent_dim = 10
-        args.task = args.network + '_' + args.task + '_' + args.level + '_v2'
+        args.task = args.network + '_' + args.task + '_' + args.level
 
     # PPO
     alg_args = {}
