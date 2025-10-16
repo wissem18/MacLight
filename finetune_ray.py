@@ -1,5 +1,6 @@
 import os, random, numpy as np, torch, json
-from ray import tune, air
+from ray import tune, air, train
+from ray.air import session
 from ray.tune import Tuner
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
@@ -19,10 +20,11 @@ def trainable(config):
 
     # ------------- ENV -------------
     seconds = 3600
+    
     NETWORK_TABLE = {
         "ff": {
-            "net":  "env/map/ff.net.xml",
-            "rou":  "env/map/ff_normal.rou.xml"
+            "net":  "/Users/wissem.yousfi/Desktop/Work/Codes/MacLight/env/map/ff.net.xml",
+            "rou":  "/Users/wissem.yousfi/Desktop/Work/Codes/MacLight/env/map/ff_normal.rou.xml"
         }
     }
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -102,14 +104,14 @@ def trainable(config):
     steps_per_ep = seconds // 5
     evaluator = Evaluator()
 
-    trial_dir = tune.get_trial_dir()
+    trial_dir = session.get_trial_dir()
     ckpt_path = os.path.join(trial_dir, "ckpt")
     os.makedirs(ckpt_path, exist_ok=True)
 
     # Ray reporting hook
     def report_fn(metrics: dict):
         # Must include "episode" and "avg_return_tail" for ASHA + best_result
-        tune.report(**metrics)
+        session.report(**metrics)
 
     # ------------- Train -------------
     return_list, _mins = train_ours_agent(
@@ -128,7 +130,7 @@ def trainable(config):
     # final report safeguard
     tail = 10
     sl = slice(max(0, len(return_list)-tail), None)
-    tune.report(avg_return_tail=float(np.mean(return_list[sl])))
+    session.report(avg_return_tail=float(np.mean(return_list[sl])))
 
 # --------- Search space (reduced; your choices fixed) ---------
 search_space = {
@@ -147,7 +149,7 @@ search_space = {
     "pred_coef":   tune.choice([0.0, 0.005, 0.01, 0.02]),
 
     # Budget & seed
-    "episodes":    40,
+    "episodes":    30,
     "seed":        42
 }
 

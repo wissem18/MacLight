@@ -136,11 +136,12 @@ def train_ours_agent(
             for agt_name in agent_name:
                 agents[agt_name].actor.load_state_dict(actor_best_weight[agt_name])
                 agents[agt_name].critic.load_state_dict(critic_best_weight[agt_name])
-
-        # save log to file and report train status
-        evaluator.evaluate_and_save(writer, return_list, waiting_list, queue_list, speed_list,
-                                    time_list, seed_list, ckpt_path, episode, agents, seed,
-                                    actor_loss_list, critic_loss_list,pred_loss_list, vae_loss_list=None, vae=None)
+        
+        if report_fn is None:
+            # save log to file and report train status
+            evaluator.evaluate_and_save(writer, return_list, waiting_list, queue_list, speed_list,
+                                        time_list, seed_list, ckpt_path, episode, agents, seed,
+                                        actor_loss_list, critic_loss_list,pred_loss_list, vae_loss_list=None, vae=None)
          
     #save attention weights for analysis
     if attn_weights_list: 
