@@ -26,6 +26,7 @@ def train_ours_agent(
     ckpt_path: str,
     evaluator: object,
     steps_per_ep: int,
+    report_fn=None
 ):
     
     actor_loss_list = []
@@ -89,6 +90,17 @@ def train_ours_agent(
         speed_list.append(info[agent_name[0]]["system_mean_speed"])
         time_list.append(time.strftime('%m-%d %H:%M:%S', time.localtime()))
         seed_list.append(seed)
+
+        if report_fn is not None:
+            tail = 10
+            sl = slice(max(0, len(return_list)-tail), None)
+            report_fn({
+                "episode": episode + 1,
+                "avg_return_tail": float(np.mean(return_list[sl])),
+                "waiting_tail": float(np.mean(waiting_list[sl])),
+                "queue_tail": float(np.mean(queue_list[sl])),
+                "speed_tail": float(np.mean(speed_list[sl])),
+            })
         
         # * ---- update agent and attention--- 
         sat_optimizer.zero_grad()          # clear shared grads

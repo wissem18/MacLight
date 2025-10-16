@@ -95,7 +95,7 @@ if __name__ == '__main__':
     alg_args['device'] = device
     alg_args['epochs'] = 10
     alg_args['eps'] = 0.2
-    alg_args['pred_coef'] = PRED_COEF
+    alg_args['pred_coef'] = PRED_COEF   
     alg_args['agent_name'] = agent_name
     
     system_type = sys.platform
