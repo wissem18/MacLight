@@ -53,14 +53,15 @@ def make_env(level, seconds, network, gui):
         "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
         "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
     }
-}
+}   
     net_file=NETWORK_TABLE[network]['net']
     rou_file=NETWORK_TABLE[network]['rou']
     env = sumo_rl.parallel_env(net_file=net_file,
                                route_file=rou_file,
                                num_seconds=seconds,
                                use_gui=gui,
-                               sumo_warnings=False,
+                               sumo_warnings=True,
+                               time_to_teleport=120,
                                additional_sumo_cmd='--no-step-log')
     return env
 
@@ -145,7 +146,7 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser("MacLight evaluator")
     p.add_argument('--ckpt', required=True, help='Directory containing the .pt checkpoint')
     p.add_argument('-t','--task', default='block', choices=['block','regular'])
-    p.add_argument('-l','--level', default='normal', choices=['normal','hard'])
+    p.add_argument('-l','--level', default='normal', choices=['normal','hard','stochastic_normal'])
     p.add_argument('-b','--block_num', type=int, default=8)
     p.add_argument('-n', '--network', default='ff', type=str, help='Scenario network key: ff/hangzhou')
     p.add_argument('--weather', default=0, type=int, help='Whether or not to add the weather perturbation scenario')
