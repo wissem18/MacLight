@@ -152,3 +152,61 @@ class SplitBlockStreet:
 
     def close(self):
         self.env.close()
+
+class FixedBlockStreet:
+    def __init__(self, env,start, end,config, seconds=3600) -> None:
+        self.env = env
+        self.time = 0
+        self.start_block = start
+        self.end_block = end
+        self.end_time = seconds
+        self.possible_agents = env.possible_agents
+        self.blockable_edges=[]
+        # West to East
+        if config == 1: 
+            self.blockable_edges=['A3B3','B3C3','C3D3','D3E3','E3F3',
+                                  'A2B2','B2C2','C2D2','D2E2','E2F2']
+        # South to North    
+        elif config == 2: 
+            self.blockable_edges=['D0D1','D1D2','D2D3','D3D4','D4D5',
+                                  'C0C1','C1C2','C2C3','C3C4','C4C5']
+        # Central Square    
+        elif config == 3: 
+            self.blockable_edges=['D3D2','D2D3','D3C3','C3D3','C2C3','C3C2','C2D2','D2C2']
+      
+        self.was_blocking = False # Track if we were in blocking scenario in previous step
+    def reset(self, seed=None):
+        self.time = 0
+        self.was_blocking = False
+        return self.env.reset(seed=seed) if seed else self.env.reset()
+
+
+    def step(self, action):
+        '''
+        Block road sections inside the time window of start_block and end_block
+        '''
+        block_active = (self.start_block <= self.time <= self.end_block)
+        if block_active:
+            if not self.was_blocking:
+                for edge_id in range(len(self.blockable_edges)):  # 阻塞通行
+                    traci.edge.setMaxSpeed(self.blockable_edges[edge_id], 0.5)  # m/s
+                vehicle_ids = traci.vehicle.getIDList()
+                for vehicle_id in vehicle_ids:
+                    traci.vehicle.rerouteTraveltime(vehicle_id)  # 车辆重新规划路径
+                self.was_blocking = True        
+        else:
+            if self.was_blocking:
+                for edge_id in range(len(self.blockable_edges)):
+                    traci.edge.setMaxSpeed(self.blockable_edges[edge_id], 13.89)
+                for vid in traci.vehicle.getIDList():
+                    traci.vehicle.rerouteTraveltime(vid)
+                self.was_blocking = False
+
+        self.time += 5
+        next_state, reward, done, truncated, info = self.env.step(action)
+        if self.time >= self.end_time:
+            done = {agt: True for agt in self.possible_agents}
+        return next_state, reward, done, truncated, info
+
+    def close(self):
+        self.env.close()

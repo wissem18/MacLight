@@ -111,7 +111,7 @@ def trainable(config):
     # Ray reporting hook
     def report_fn(metrics: dict):
         # Must include "episode" and "avg_return_tail" for ASHA + best_result
-        session.report(**metrics)
+        session.report(metrics)
 
     # ------------- Train -------------
     return_list, _mins = train_ours_agent(
@@ -127,10 +127,10 @@ def trainable(config):
         report_fn=report_fn
     )
 
-    # final report safeguard
-    tail = 10
-    sl = slice(max(0, len(return_list)-tail), None)
-    session.report(avg_return_tail=float(np.mean(return_list[sl])))
+    # # final report safeguard
+    # tail = 10
+    # sl = slice(max(0, len(return_list)-tail), None)
+    # session.report(avg_return_tail=float(np.mean(return_list[sl])))
 
 # --------- Search space (reduced; your choices fixed) ---------
 search_space = {

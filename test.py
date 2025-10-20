@@ -11,7 +11,7 @@ from pathlib import Path
 from net.net import PolicyNet, ValueNet
 from agent.Ours_agent import MacLight
 from util.tools import MARLWrap
-from env.wrap.random_block import BlockStreet, SplitBlockStreet
+from env.wrap.random_block import BlockStreet, SplitBlockStreet, FixedBlockStreet
 
 def get_next_result_path(directory="test", basename="eval_results", ext="csv"):
     existing = [f for f in os.listdir(directory) if f.startswith(basename) and f.endswith('.'+ext)]
@@ -60,7 +60,7 @@ def make_env(level, seconds, network, gui):
                                route_file=rou_file,
                                num_seconds=seconds,
                                use_gui=gui,
-                               sumo_warnings=True,
+                               sumo_warnings=False,
                                time_to_teleport=120,
                                additional_sumo_cmd='--no-step-log')
     return env
@@ -74,10 +74,10 @@ def evaluate(args):
     names       = env.possible_agents
     state_dim   = env.observation_space(names[0]).shape[0]
     action_dim  = env.action_space(names[0]).n
-    hidden_dim  = (state_dim+32) * 2
+    hidden_dim  = (state_dim) * 2
 
     if args.task == 'block':
-        env = BlockStreet(env, perturbation_start, perturbation_end,args.network,block_num=args.block_num)
+        env = BlockStreet(env, perturbation_start, perturbation_end, args.network)
 
     if args.weather:
         env=WeatherPerturb(env,seconds=args.seconds,start=perturbation_start,end=perturbation_end)
