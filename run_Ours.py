@@ -83,8 +83,8 @@ if __name__ == '__main__':
         args.task = args.network + '_' + args.task + '_' + args.level
     
     # Transformer settings  ---------------------------------- #
-    K_HISTORY   = 8        # deque length for TemporalEncoder
-    PRED_COEF   = 0.01      # β in total loss  (λ_pred in X-Light)
+    K_HISTORY   = 4        # deque length for TemporalEncoder
+    PRED_COEF   = 0.02      # β in total loss  (λ_pred in X-Light)
 
     # PPO
     alg_args = {}
@@ -104,11 +104,11 @@ if __name__ == '__main__':
     # ---------------------------- networks ------------------------------
     adj_mask  = build_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
     edge_index = adj_to_edge_index(adj_mask).to(device)
-    sat = SATBlock(d_in=33,d_out=global_emb_dim,edge_index=edge_index,dropout=0.1,k_hop=2,gnn_type="gcn",num_layers=2).to(device)
+    sat = SATBlock(d_in=33,d_out=global_emb_dim,edge_index=edge_index,dropout=0.1,k_hop=3,gnn_type="gcn",num_layers=2).to(device)
     temp_enc = TemporalEncoder(d_model=global_emb_dim, K=K_HISTORY).to(device)
     predictor = DynamicPredictor(d_model=global_emb_dim, action_dim=action_dim).to(device)
 
-    base_lr=1e-3
+    base_lr=1e-4
     warmup_frac  = 0.1                         # 10 % warm-up
     steps_per_ep = args.seconds//5              
     total_steps  = args.episodes
