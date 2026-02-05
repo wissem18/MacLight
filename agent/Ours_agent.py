@@ -87,25 +87,25 @@ class MacLight:
             rewards_enhanced = R_enhanced_all[:, idx].view(-1, 1)
 
             # --- [DEBUG BLOCK: RUNS ONCE PER UPDATE CALL] ---
-            if epoch == 9:
-                print(f"\n--- [DEBUG] Agent: {agent_name} (Index {idx}) ---")
+            # if epoch == 9:
+            #     print(f"\n--- [DEBUG] Agent: {agent_name} (Index {idx}) ---")
                 
-                # Check 1: Neighbors with non-zero attention (at t=0)
-                # alpha_matrix[0, idx] is the row of attention weights THIS agent gives to others
-                my_attn = alpha_matrix[0, idx]
-                neighbor_indices = torch.nonzero(my_attn > 0.001).flatten()
-                print(f"  > Connected Neighbors (Indices): {neighbor_indices.tolist()}")
-                print(f"  > Attention Weights: {my_attn[neighbor_indices].cpu().numpy().round(3)}")
+            #     # Check 1: Neighbors with non-zero attention (at t=0)
+            #     # alpha_matrix[0, idx] is the row of attention weights THIS agent gives to others
+            #     my_attn = alpha_matrix[0, idx]
+            #     neighbor_indices = torch.nonzero(my_attn > 0.001).flatten()
+            #     print(f"  > Connected Neighbors (Indices): {neighbor_indices.tolist()}")
+            #     print(f"  > Attention Weights: {my_attn[neighbor_indices].cpu().numpy().round(3)}")
                 
-                # Check 2: Reward Values (at t=0)
-                raw_val = whole_reward_raw[0, idx].item()
-                neighbor_contrib_val = R_neighbors[0, idx].item()
-                final_val = R_enhanced_all[0, idx].item()
+            #     # Check 2: Reward Values (at t=0)
+            #     raw_val = whole_reward_raw[0, idx].item()
+            #     neighbor_contrib_val = R_neighbors[0, idx].item()
+            #     final_val = R_enhanced_all[0, idx].item()
                 
-                print(f"  > Raw Reward (R_it): {raw_val:.4f}")
-                print(f"  > Neighbor Contrib (sum(alpha*R_vt)): {neighbor_contrib_val:.4f}")
-                print(f"  > Final Reward (R_enhanced): {final_val:.4f}")
-                print("--------------------------------------------------\n")
+            #     print(f"  > Raw Reward (R_it): {raw_val:.4f}")
+            #     print(f"  > Neighbor Contrib (sum(alpha*R_vt)): {neighbor_contrib_val:.4f}")
+            #     print(f"  > Final Reward (R_enhanced): {final_val:.4f}")
+            #     print("--------------------------------------------------\n")
             # --------------------------------------------------------------
 
             # Overwrite the 'rewards' variable used for TD Target calculation
