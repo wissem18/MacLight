@@ -14,6 +14,7 @@ class MacLight:
         self.gamma, self.lmbda, self.pred_coef = gamma, lmbda, pred_coef
         self.epochs, self.eps  = epochs, eps
         self.device            = device
+        self.full_A =None
 
 
 
@@ -28,24 +29,20 @@ class MacLight:
     
     def update(self, transition_dict, agent_name, attention, temp_enc, predictor, accumulate_attn_grad=False):
         """
-        One agent’s PPO update with temporal encoder + dynamic predictor.
-        INCLUDES: Attention-Weighted Reward Calculation.
+        One agent’s PPO update.
+        NOW USES: Fixed Beta Reward (25% Ego + 75% Mean Neighbor).
         """
-        # ------------------------------------------------------------------
-        # 1. Pull this agent’s local trajectory tensors (RAW REWARDS)
-        # ------------------------------------------------------------------
+        # 1. Setup Data
         to_t = lambda x, dtype: torch.tensor(x, dtype=dtype, device=self.device)
         states      = to_t(transition_dict['states'][agent_name]     , torch.float32)
         actions     = to_t(transition_dict['actions'][agent_name]    , torch.int64 ).view(-1,1)
-        # Load local rewards (will be overwritten later with enhanced rewards)
+        # Load raw rewards (will be overwritten)
         rewards     = to_t(transition_dict['rewards'][agent_name]    , torch.float32).view(-1,1)
         next_states = to_t(transition_dict['next_states'][agent_name], torch.float32)
         dones       = to_t(transition_dict['dones'][agent_name]      , torch.int32 ).view(-1,1)
 
-        # ------------------------------------------------------------------
-        # 2. Build whole-state tensors (T, N, ...) for shared Attention
-        # ------------------------------------------------------------------
-        # [USER REQUEST] No sorting, relying on preservation of insertion order
+        # 2. Build Whole-Network Data (for Neighbor Calculation)
+        # Use simple list order (relies on env.agents order consistency)
         agt_order = list(transition_dict['states'].keys())
         idx       = agt_order.index(agent_name)
         
@@ -54,84 +51,81 @@ class MacLight:
         whole_state      = stack('states')
         whole_next_state = stack('next_states')
         whole_action     = stack('actions', dtype=torch.int64)
-        
-        # Stack ALL agents' raw rewards to compute neighbors' contribution
-        whole_reward_raw = stack('rewards')  # Shape: (T, N)
+        whole_reward_raw = stack('rewards')  # Shape: (T, N) or (T, N, 1) depending on view
 
         old_log_probs = torch.log(self.actor(states).gather(1, actions)).detach()
 
-        # ------------------------------------------------------------------
-        # 3. PPO E epochs
-        # ------------------------------------------------------------------
+        # ==================================================================
+        # [NEW] FIXED REWARD CALCULATION (Beta Strategy)
+        # Formula: R_new = beta * R_ego + (1-beta) * Mean(R_neighbors)
+        # ==================================================================
+        
+        # A. Define Beta
+        beta = 0.25  # 25% Ego, 75% Neighbors
+        
+        # B. Build Static Adjacency Matrix from GAT's edge_index
+        # attention.edge_index is (2, E)
+        N_nodes = whole_reward_raw.shape[1]
+        adj = torch.zeros((N_nodes, N_nodes), device=self.device)
+        
+        # Fill 1.0 where edges exist (Binary Adjacency)
+        # This assumes edge_index contains directed edges i->j
+        adj.index_put_((attention.edge_index[0], attention.edge_index[1]), 
+                       torch.tensor(1.0, device=self.device))
+        
+        # Remove self-loops from adjacency if they exist (to strictly calculate neighbor mean)
+        adj.fill_diagonal_(0)
+
+        # C. Calculate Mean Neighbor Reward
+        # Sum of neighbor rewards for each node: Matrix Mul (N,N) x (T,N,1) -> (T,N,1)
+        # We ensure whole_reward_raw is (T, N, 1)
+        if whole_reward_raw.dim() == 2:
+            whole_reward_raw = whole_reward_raw.unsqueeze(-1)
+            
+        sum_neighbor_R = torch.matmul(adj, whole_reward_raw) 
+        
+        # Calculate Degree (count of neighbors) for each node
+        degree = adj.sum(dim=1, keepdim=True) # Shape (N, 1)
+        degree = torch.clamp(degree, min=1.0) # Avoid division by zero
+        
+        # Mean = Sum / Degree
+        # Transpose degree to broadcast correctly against (T, N, 1) if needed, 
+        # but usually (N,1) broadcasts fine against (T,N,1) on the 2nd dim.
+        mean_neighbor_R = sum_neighbor_R / degree
+
+        # D. Apply Formula
+        R_fixed_all = (beta * whole_reward_raw) + ((1 - beta) * mean_neighbor_R)
+
+        # E. Extract THIS agent's new reward
+        rewards = R_fixed_all[:, idx].view(-1, 1)
+        
+        # [Optional Debug]
+        # if idx == 0:
+        #     print(f"Agent {idx} Raw: {whole_reward_raw[0,idx].item():.2f} | NeighMean: {mean_neighbor_R[0,idx].item():.2f} | Final: {rewards[0].item():.2f}")
+
+        # ==================================================================
+
+        # 3. PPO Epochs
         for epoch in range(self.epochs):
+            # 1– Spatial embeddings via GAT 
+            # (We still run GAT for the State Embedding, even if we don't use it for Reward)
+            h_all, _ = attention(whole_state) 
 
-            # 1– Spatial embeddings via GAT
-            # h_all: (T, N, d), A: (T, Heads, N, N)
-            h_all, A = attention(whole_state) 
-
-            # ==================================================================
-            # [NEW] ATTENTION-WEIGHTED REWARD CALCULATION
-            # Formula: R_new = R_self + sum(alpha_iv * R_v)
-            # ==================================================================
-            
-            # Average attention heads to get (T, N, N)
-            alpha_matrix = A.mean(dim=1).detach() 
-            
-            # Calculate Neighbor Contribution: (T,N,N) x (T,N,1) -> (T,N,1)
-            R_neighbors = torch.bmm(alpha_matrix, whole_reward_raw.unsqueeze(-1)).squeeze(-1)
-            
-            # Add Raw Reward + Neighbor Contribution
-            R_enhanced_all = whole_reward_raw + R_neighbors
-            
-            # Extract ONLY the current agent's new reward for this update
-            rewards_enhanced = R_enhanced_all[:, idx].view(-1, 1)
-
-            # --- [DEBUG BLOCK: RUNS ONCE PER UPDATE CALL] ---
-            # if epoch == 9:
-            #     print(f"\n--- [DEBUG] Agent: {agent_name} (Index {idx}) ---")
-                
-            #     # Check 1: Neighbors with non-zero attention (at t=0)
-            #     # alpha_matrix[0, idx] is the row of attention weights THIS agent gives to others
-            #     my_attn = alpha_matrix[0, idx]
-            #     neighbor_indices = torch.nonzero(my_attn > 0.001).flatten()
-            #     print(f"  > Connected Neighbors (Indices): {neighbor_indices.tolist()}")
-            #     print(f"  > Attention Weights: {my_attn[neighbor_indices].cpu().numpy().round(3)}")
-                
-            #     # Check 2: Reward Values (at t=0)
-            #     raw_val = whole_reward_raw[0, idx].item()
-            #     neighbor_contrib_val = R_neighbors[0, idx].item()
-            #     final_val = R_enhanced_all[0, idx].item()
-                
-            #     print(f"  > Raw Reward (R_it): {raw_val:.4f}")
-            #     print(f"  > Neighbor Contrib (sum(alpha*R_vt)): {neighbor_contrib_val:.4f}")
-            #     print(f"  > Final Reward (R_enhanced): {final_val:.4f}")
-            #     print("--------------------------------------------------\n")
-            # --------------------------------------------------------------
-
-            # Overwrite the 'rewards' variable used for TD Target calculation
-            rewards = rewards_enhanced
-            # ==================================================================
-
-            # Stack the last K GAT outputs for each timestep -> Transformer
+            # Stack K for Temporal Encoder
             K = temp_enc.K
             pad  = torch.zeros(K - 1, *h_all.shape[1:], device=self.device)
-            cat  = torch.cat([pad, h_all], dim=0)                           # (T+K-1,N,d)
+            cat  = torch.cat([pad, h_all], dim=0)
             hist = torch.stack([cat[t:t + K] for t in range(h_all.size(0))], 0)
-            hist = hist.permute(0, 2, 1, 3)                                 # (T,N,K,d)
-            z_all = temp_enc(hist)                                          # (T,N,d)
+            hist = hist.permute(0, 2, 1, 3)
+            z_all = temp_enc(hist)
 
-            z_t     = z_all[:, idx, :]                                      # (T,d)  this node
+            z_t     = z_all[:, idx, :]
             z_next  = torch.cat([z_t[1:], z_t[-1:].clone()], dim=0)
 
-            if epoch == self.epochs - 1:
-                self.full_A = A.detach().cpu().to(torch.float16)
-
-            # 2– Critic targets (Uses the ENHANCED 'rewards')
+            # 2– Critic targets (Uses Fixed Rewards)
             v_now  = self.critic(states, z_t)
             v_next = self.critic(next_states, z_next).detach()
-            
             td_tgt = rewards + self.gamma * v_next * (1 - dones)
-            
             td_del = td_tgt - v_now
             adv = self.compute_advantage(self.gamma, self.lmbda, td_del.detach()).to(self.device)
 
@@ -143,9 +137,8 @@ class MacLight:
             critic_loss = F.mse_loss(v_now, td_tgt)
 
             # 4– Dynamic-prediction loss
-            # NOTE: We use RAW rewards for prediction task to keep physics consistent
             a_prev = F.one_hot(whole_action[:-1], num_classes=predictor.action_dim).float()
-            r_prev = whole_reward_raw[:-1].unsqueeze(-1)  # Using RAW rewards for predictor
+            r_prev = whole_reward_raw[:-1] # Use RAW rewards for predictor physics
             z_prev = z_all[:-1].reshape(-1, z_t.size(-1))
             z_tgt  = z_all[1:].reshape(-1, z_t.size(-1))
             z_hat  = predictor(z_prev,
@@ -153,7 +146,6 @@ class MacLight:
                                r_prev.reshape(-1, 1))
             pred_loss = F.mse_loss(z_hat, z_tgt.detach())
 
-            # 5– Back-prop
             self.actor_optimizer.zero_grad(set_to_none=True)
             self.critic_optimizer.zero_grad(set_to_none=True)
             total_loss = actor_loss + critic_loss + self.pred_coef * pred_loss
