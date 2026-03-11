@@ -13,7 +13,7 @@ from agent.Ours_agent import MacLight
 from util.tools import MARLWrap
 from env.wrap.random_block import BlockStreet, SplitBlockStreet
 
-def get_next_result_path(directory="test", basename="eval_results", ext="csv"):
+def get_next_result_path(directory="test_instr", basename="eval_results", ext="csv"):
     existing = [f for f in os.listdir(directory) if f.startswith(basename) and f.endswith('.'+ext)]
     nums = []
     for f in existing:
@@ -140,13 +140,13 @@ def evaluate(args):
     df = pd.DataFrame(rows)
     out_path,cur=get_next_result_path()
     df.to_csv(out_path, index=False)
-    np.savez_compressed(f"test/{cur}_step_metrics.npz",step_log=step_log)
+    np.savez_compressed(f"test_instr/{cur}_step_metrics.npz",step_log=step_log)
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser("MacLight evaluator")
     p.add_argument('--ckpt', required=True, help='Directory containing the .pt checkpoint')
     p.add_argument('-t','--task', default='block', choices=['block','regular'])
-    p.add_argument('-l','--level', default='normal', choices=['normal','hard'])
+    p.add_argument('-l','--level', default='normal', choices=['normal','hard','stochastic_normal'])
     p.add_argument('-b','--block_num', type=int, default=8)
     p.add_argument('-n', '--network', default='ff', type=str, help='Scenario network key: ff/hangzhou')
     p.add_argument('--weather', default=0, type=int, help='Whether or not to add the weather perturbation scenario')
