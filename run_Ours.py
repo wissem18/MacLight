@@ -62,7 +62,7 @@ if __name__ == '__main__':
     env = sumo_rl.parallel_env(net_file=net_file,
                                route_file=route_file,
                                num_seconds=args.seconds,
-                               use_gui=False,
+                               use_gui=True,
                                sumo_warnings=False,
                                time_to_teleport=120,
                                additional_sumo_cmd='--no-step-log')
@@ -110,7 +110,7 @@ if __name__ == '__main__':
     # ---------------------------- networks ------------------------------
     adj_mask  = build_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
     edge_index = adj_to_edge_index(adj_mask).to(device)
-    gat = GATBlock(d_in=33, d_out=global_emb_dim, heads=4, edge_index= edge_index, dropout=0.1).to(device)
+    gat = GATBlock(d_in=state_dim, d_out=global_emb_dim, heads=4, edge_index= edge_index, dropout=0.1).to(device)
     temp_enc = TemporalEncoder(d_model=global_emb_dim, K=K_HISTORY).to(device)
     predictor = DynamicPredictor(d_model=global_emb_dim, action_dim=action_dim).to(device)
 
