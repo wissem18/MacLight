@@ -108,9 +108,9 @@ def train_ours_agent(
         critic_loss_list.append(float(np.mean(ep_critic)))
         pred_loss_list.append(float(np.mean(ep_pred)))
 
-        attn_weights_list.append(
-            agents[agent_name[0]].get_full_attention()
-        )
+        # attn_weights_list.append(
+        #     agents[agent_name[0]].get_full_attention()
+        # )
 
         # read best weights
         if episode_return > best_score:
@@ -130,12 +130,12 @@ def train_ours_agent(
                                     time_list, seed_list, ckpt_path, episode, agents, seed,
                                     actor_loss_list, critic_loss_list,pred_loss_list, vae_loss_list=None, vae=None)
          
-    #save attention weights for analysis
-    if attn_weights_list: 
-        save_path=f"{ckpt_path}/{seed}_gat_full_attn.fp16.npz"                                
-        att_stack = torch.stack(attn_weights_list)        
-        np.savez_compressed(save_path, att_stack.numpy())
-        print(f"saved raw attention tensor → {os.path.getsize(save_path)/1e6:.1f} MB")  
+    # #save attention weights for analysis
+    # if attn_weights_list: 
+    #     save_path=f"{ckpt_path}/{seed}_gat_full_attn.fp16.npz"                                
+    #     att_stack = torch.stack(attn_weights_list)        
+    #     np.savez_compressed(save_path, att_stack.numpy())
+    #     print(f"saved raw attention tensor → {os.path.getsize(save_path)/1e6:.1f} MB")  
                                     
     np.savez_compressed(f"{ckpt_path}/{seed}_step_metrics.npz",step_log=step_log)
     env.close()
