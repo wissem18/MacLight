@@ -52,7 +52,11 @@ def make_env(level, seconds, network, gui):
     "hangzhou": {
         "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
         "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
-    }
+    },
+    "hangzhou_constant": {
+        "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
+        "rou":  "env/map/hangzhou_constant.rou.xml"
+    }   
 }
     net_file=NETWORK_TABLE[network]['net']
     rou_file=NETWORK_TABLE[network]['rou']
@@ -74,7 +78,7 @@ def evaluate(args):
     names       = env.possible_agents
     state_dim   = env.observation_space(names[0]).shape[0]
     action_dim  = env.action_space(names[0]).n
-    hidden_dim  = (state_dim+32) * 2
+    hidden_dim  = (state_dim) * 2
 
     if args.task == 'block':
         env = BlockStreet(env, perturbation_start, perturbation_end,args.network,block_num=args.block_num)

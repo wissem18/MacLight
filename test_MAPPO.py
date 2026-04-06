@@ -24,7 +24,11 @@ def make_env(level, seconds, network, gui):
         "hangzhou": {
             "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
             "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
-        }
+        },
+        "hangzhou_constant": {
+        "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
+        "rou":  "env/map/hangzhou_constant.rou.xml"
+    } 
     }
     net_file = NETWORK_TABLE[network]['net']
     rou_file = NETWORK_TABLE[network]['rou']
