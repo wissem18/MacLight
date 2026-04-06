@@ -25,7 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--representation', default=False, help='Whether or not to use VAE') # Cannot be set to True here
     parser.add_argument('-b', '--block_num', default=8, type=int, help='Number of blocked roads')
     parser.add_argument('-l', '--level', default='normal', type=str, help='Difficulty of the task: normal/hard')
-    parser.add_argument('-n', '--network', default='ff', type=str,help='Scenario network key: ff / hangzhou') 
+    parser.add_argument('-n', '--network', default='ff', type=str,help='Scenario network key: ff / hangzhou / manhattan') 
     parser.add_argument('-w', '--writer', default=0, type=int, help='Log mode, 0: no, 1: local')
     parser.add_argument('--seconds', default=3600, type=int, help='Simulation seconds')
     parser.add_argument('-e', '--episodes', default=80, type=int, help='Number of running episodes')
@@ -43,6 +43,11 @@ if __name__ == '__main__':
     "hangzhou": {
         "net":  "env/map/hangzhou_4x4_gudang_18041610_1h.net.xml",
         "rou":  "env/map/hangzhou_4x4_gudang_18041610_1h.rou.xml"
+    },
+    # Manhattan dataset
+    "manhattan":{
+        "net":  "env/map/manhattan_28x7.net.xml",
+        "rou":  "env/map/manhattan_28x7.rou.xml"
     }
 }
     
