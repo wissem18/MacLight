@@ -62,7 +62,7 @@ if __name__ == '__main__':
     env = sumo_rl.parallel_env(net_file=net_file,
                                route_file=route_file,
                                num_seconds=args.seconds,
-                               use_gui=True,
+                               use_gui=False,
                                sumo_warnings=False,
                                time_to_teleport=120,
                                additional_sumo_cmd='--no-step-log')
