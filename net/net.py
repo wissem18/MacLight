@@ -58,7 +58,7 @@ class VAE(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(128, 64, kernel_size=3, stride=1, padding=1),  # [batch_size, 64, 4, 4]
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 33, kernel_size=3, stride=1, padding=1),  # [batch_size, 33, 4, 4]
+            nn.ConvTranspose2d(64, state_dim, kernel_size=3, stride=1, padding=1),  # [batch_size, 33, 4, 4]
             nn.Sigmoid()  # The output range is [0, 1], as same as input feature range
         )
 

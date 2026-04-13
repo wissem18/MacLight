@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import math
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
@@ -145,11 +146,31 @@ def update_transition(agent_name, epi_training, transition_dict, state, done, ac
     return transition_dict
 
 def reshape_whole_state(state):
-    global_state = torch.cat([torch.stack([state[:, 3], state[:, 7], state[:, 11], state[:, 15]], dim=1).unsqueeze(1),
-                              torch.stack([state[:, 2], state[:, 6], state[:, 10], state[:, 14]], dim=1).unsqueeze(1),
-                              torch.stack([state[:, 1], state[:, 5], state[:, 9],  state[:, 13]], dim=1).unsqueeze(1),
-                              torch.stack([state[:, 0], state[:, 4], state[:, 8],  state[:, 12]], dim=1).unsqueeze(1)], dim=1)
+    # state shape is: (batch_size, num_agents, feature_dim)
+    batch_size, num_agents, feature_dim = state.shape
+    
+    # 1. Dynamically determine the grid size
+    if num_agents == 16:
+        rows, cols = 4, 4
+    elif num_agents == 196:
+        # Manhattan is typically 28x7. 
+        rows, cols = 28, 7 
+    else:
+        # Fallback for any other custom dataset (tries to make a square)
+        rows = int(math.sqrt(num_agents))
+        cols = num_agents // rows
+
+    # 2. Reshape dynamically without losing any intersections
+    try:
+        # Reshape to (Batch, Rows, Cols, Features)
+        global_state = state.view(batch_size, rows, cols, feature_dim)
+    except RuntimeError:
+        # If the grid isn't perfectly rectangular, pad it or fallback to a 1D spatial line
+        global_state = state.view(batch_size, 1, num_agents, feature_dim)
+    
+    # 3. Permute to match PyTorch CNN format: (Batch, Channels/Features, Height, Width)
     global_state = global_state.permute(0, 3, 1, 2)
+    
     return global_state
 
 # VAE loss function
