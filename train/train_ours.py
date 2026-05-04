@@ -47,11 +47,11 @@ def train_ours_agent(
     
     for episode in range(total_episodes):
         epi_training = False
-        transition_dict = {"states": {agt_name: 0 for agt_name in agent_name},
-                           "actions": {agt_name: 0 for agt_name in agent_name},
-                           "next_states": {agt_name: 0 for agt_name in agent_name},
-                           "rewards": {agt_name: 0 for agt_name in agent_name},
-                           "dones": {agt_name: 0 for agt_name in agent_name},
+        transition_dict = {"states": {agt_name: [] for agt_name in agent_name},
+                           "actions": {agt_name: [] for agt_name in agent_name},
+                           "next_states": {agt_name: [] for agt_name in agent_name},
+                           "rewards": {agt_name: [] for agt_name in agent_name},
+                           "dones": {agt_name: [] for agt_name in agent_name},
                            "global_emb": []}
         episode_return = 0
         ep_actor, ep_critic, ep_pred = [], [], []
@@ -90,6 +90,8 @@ def train_ours_agent(
         time_list.append(time.strftime('%m-%d %H:%M:%S', time.localtime()))
         seed_list.append(seed)
         
+        transition_dict = finalize_transition(agent_name, transition_dict)
+
         # * ---- update agent and attention--- 
         gat_optimizer.zero_grad()          # clear shared grads
         for agt_name in agent_name:
@@ -151,9 +153,22 @@ def update_transition(agent_name, epi_training, transition_dict, state, done, ac
     for key, element in zip(['states', 'actions', 'next_states', 'rewards', 'dones'],
                             [state, action, next_state, reward, done]):
         for agt_name in agent_name:
-            if not epi_training:
-                transition_dict[key][agt_name] = torch.tensor(element[agt_name]).unsqueeze(0)
-            else:
-                transition_dict[key][agt_name] = torch.cat([transition_dict[key][agt_name],
-                                                            torch.tensor([element[agt_name]])])
+            transition_dict[key][agt_name].append(element[agt_name])
+    return transition_dict
+
+
+def finalize_transition(agent_name, transition_dict):
+    dtype_table = {
+        'states': torch.float32,
+        'actions': torch.int64,
+        'next_states': torch.float32,
+        'rewards': torch.float32,
+        'dones': torch.int32,
+    }
+    for key, dtype in dtype_table.items():
+        for agt_name in agent_name:
+            transition_dict[key][agt_name] = torch.as_tensor(
+                np.asarray(transition_dict[key][agt_name]),
+                dtype=dtype,
+            )
     return transition_dict

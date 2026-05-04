@@ -33,6 +33,9 @@ if __name__ == '__main__':
     parser.add_argument('-w', '--writer', default=0, type=int, help='Log mode, 0: no, 1: local')
     parser.add_argument('--seconds', default=3600, type=int, help='Simulation seconds')
     parser.add_argument('-e', '--episodes', default=80, type=int, help='Number of running episodes')
+    parser.add_argument('--history', default=None, type=int, help='Temporal history length; auto-scaled for large networks')
+    parser.add_argument('--ppo_epochs', default=None, type=int, help='PPO update epochs; auto-scaled for large networks')
+    parser.add_argument('--gat_heads', default=None, type=int, help='GAT attention heads; auto-scaled for large networks')
     parser.add_argument('-s', '--seed', nargs='+', default=[42,46], type=int, help='Set a random seed range to run in sequence')
     args = parser.parse_args()
     
@@ -69,6 +72,7 @@ if __name__ == '__main__':
                                
     # Neural Networks
     agent_name = env.possible_agents
+    is_large_network = args.network == "manhattan"
     global_emb_dim = 32
     state_dim = [env.observation_space(i).shape[0] for i in agent_name]
     hidden_dim = [(env.observation_space(i).shape[0]+global_emb_dim) * 2 for i in agent_name]
@@ -89,7 +93,7 @@ if __name__ == '__main__':
         args.task = args.network + '_' + args.task + '_' + args.level
     
     # Transformer settings  ---------------------------------- #
-    K_HISTORY   = 8        # deque length for TemporalEncoder
+    K_HISTORY   = args.history or (4 if is_large_network else 8)        # deque length for TemporalEncoder
     PRED_COEF   = 0.01      # β in total loss  (λ_pred in X-Light)
 
     # PPO
@@ -99,7 +103,7 @@ if __name__ == '__main__':
     alg_args['lmbda'] = 0.95
     alg_args['gamma'] = 0.99
     alg_args['device'] = device
-    alg_args['epochs'] = 10
+    alg_args['epochs'] = args.ppo_epochs or (3 if is_large_network else 10)
     alg_args['eps'] = 0.2
     alg_args['pred_coef'] = PRED_COEF
     alg_args['agent_name'] = agent_name
@@ -108,9 +112,10 @@ if __name__ == '__main__':
 
 
     # ---------------------------- networks ------------------------------
-    adj_mask  = build_adj_matrix(net_file='env/map/ff.net.xml', agent_ids=agent_name) 
+    adj_mask  = build_adj_matrix(net_file=net_file, agent_ids=agent_name)
     edge_index = adj_to_edge_index(adj_mask).to(device)
-    gat = GATBlock(d_in=state_dim, d_out=global_emb_dim, heads=4, edge_index= edge_index, dropout=0.1).to(device)
+    gat_heads = args.gat_heads or (2 if is_large_network else 4)
+    gat = GATBlock(d_in=state_dim, d_out=global_emb_dim, heads=gat_heads, edge_index= edge_index, dropout=0.1).to(device)
     temp_enc = TemporalEncoder(d_model=global_emb_dim, K=K_HISTORY).to(device)
     predictor = DynamicPredictor(d_model=global_emb_dim, action_dim=action_dim).to(device)
 

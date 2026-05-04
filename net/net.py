@@ -69,13 +69,17 @@ class GATBlock(nn.Module):
             add_self_loops=False
         )
 
-    def forward(self, H):               # H: (B, N, d_in)
+    def forward(self, H, return_attention: bool = False):  # H: (B, N, d_in)
         B, N, _ = H.size()
         H = self.embed(H)
         out = []
         attn = []
         h_=self.gat.heads
         for b in range(B):
+            if not return_attention:
+                out.append(self.gat(H[b], self.edge_index))
+                continue
+
             # out_b : (N,d_out)   α_b : (E,heads)
             out_b, (e_idx, α_b) = self.gat(
                     H[b], self.edge_index, return_attention_weights=True)
@@ -93,7 +97,9 @@ class GATBlock(nn.Module):
             out.append(out_b)
             attn.append(A_dense)             
 
-        return torch.stack(out, 0), torch.stack(attn, 0)   # (B,N,d) , (B,H,N,N)
+        if return_attention:
+            return torch.stack(out, 0), torch.stack(attn, 0)   # (B,N,d) , (B,H,N,N)
+        return torch.stack(out, 0), None
     
 # ─────────────────────────────────────────────────────────────
 #  Temporal Encoder  (Upper Transformer from X-Light)

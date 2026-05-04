@@ -33,7 +33,7 @@ class MacLight:
         NOW USES: Fixed Beta Reward (25% Ego + 75% Mean Neighbor).
         """
         # 1. Setup Data
-        to_t = lambda x, dtype: torch.tensor(x, dtype=dtype, device=self.device)
+        to_t = lambda x, dtype: x.to(device=self.device, dtype=dtype) if torch.is_tensor(x) else torch.as_tensor(x, dtype=dtype, device=self.device)
         states      = to_t(transition_dict['states'][agent_name]     , torch.float32)
         actions     = to_t(transition_dict['actions'][agent_name]    , torch.int64 ).view(-1,1)
         # Load raw rewards (will be overwritten)
@@ -66,15 +66,13 @@ class MacLight:
         # B. Build Static Adjacency Matrix from GAT's edge_index
         # attention.edge_index is (2, E)
         N_nodes = whole_reward_raw.shape[1]
-        adj = torch.zeros((N_nodes, N_nodes), device=self.device)
-        
-        # Fill 1.0 where edges exist (Binary Adjacency)
-        # This assumes edge_index contains directed edges i->j
-        adj.index_put_((attention.edge_index[0], attention.edge_index[1]), 
-                       torch.tensor(1.0, device=self.device))
-        
-        # Remove self-loops from adjacency if they exist (to strictly calculate neighbor mean)
-        adj.fill_diagonal_(0)
+        adj = getattr(attention, "_dense_neighbor_adj", None)
+        if adj is None or adj.shape[0] != N_nodes or adj.device != torch.device(self.device):
+            adj = torch.zeros((N_nodes, N_nodes), device=self.device)
+            edge_index = attention.edge_index.to(self.device)
+            adj.index_put_((edge_index[0], edge_index[1]), torch.tensor(1.0, device=self.device))
+            adj.fill_diagonal_(0)
+            attention._dense_neighbor_adj = adj
 
         # C. Calculate Mean Neighbor Reward
         # Sum of neighbor rewards for each node: Matrix Mul (N,N) x (T,N,1) -> (T,N,1)
