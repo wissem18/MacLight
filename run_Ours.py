@@ -19,7 +19,26 @@ import warnings
 warnings.filterwarnings('ignore')
 from transformers import get_cosine_schedule_with_warmup
 from env.wrap.weather_perturbation import WeatherPerturb
-warnings.filterwarnings('ignore')
+
+
+def patch_sumo_rl_no_warnings():
+    """Ensure sumo-rl also silences warnings in its temporary init connection."""
+    from sumo_rl.environment import env as sumo_env_module
+
+    if getattr(sumo_env_module.traci.start, "_maclight_no_warnings_patch", False):
+        return
+
+    original_start = sumo_env_module.traci.start
+
+    def start_with_no_warnings(cmd, *args, **kwargs):
+        if isinstance(cmd, (list, tuple)) and "--no-warnings" not in cmd:
+            cmd = list(cmd)
+            cmd.append("--no-warnings")
+        return original_start(cmd, *args, **kwargs)
+
+    start_with_no_warnings._maclight_no_warnings_patch = True
+    sumo_env_module.traci.start = start_with_no_warnings
+
 
 # * ---------------------- Parameters -------------------------
 if __name__ == '__main__':
@@ -62,13 +81,15 @@ if __name__ == '__main__':
     net_file=NETWORK_TABLE[args.network]["net"]
     route_file=NETWORK_TABLE[args.network]["rou"]    
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    patch_sumo_rl_no_warnings()
     env = sumo_rl.parallel_env(net_file=net_file,
-                               route_file=route_file,
-                               num_seconds=args.seconds,
-                               use_gui=False,
-                               sumo_warnings=False,
-                               time_to_teleport=120,
-                               additional_sumo_cmd='--no-step-log')
+                                   route_file=route_file,
+                                   num_seconds=args.seconds,
+                                   use_gui=False,
+                                   sumo_warnings=False,
+                                   time_to_teleport=120,
+                                   additional_sumo_cmd='--no-step-log')
+    
                                
     # Neural Networks
     agent_name = env.possible_agents
